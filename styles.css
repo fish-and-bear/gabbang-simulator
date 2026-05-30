@@ -251,7 +251,7 @@ button.active {
 }
 
 .theme-cycle {
-  top: 58px;
+  top: calc(18px + var(--safe-top));
   right: 20px;
   z-index: 5;
   min-width: 66px;
@@ -275,8 +275,8 @@ button.active {
 }
 
 .inspector {
-  top: 98px;
-  right: 20px;
+  top: calc(18px + var(--safe-top));
+  right: 96px;
   width: min(292px, calc(100vw - 40px));
   padding: 14px;
   display: grid;
@@ -686,7 +686,7 @@ select option:checked {
   }
 
   .inspector {
-    top: calc(132px + var(--safe-top));
+    top: calc(58px + var(--safe-top));
     left: 14px;
     right: 14px;
     bottom: auto;
@@ -703,14 +703,14 @@ select option:checked {
   }
 
   .theme-cycle {
-    top: calc(54px + var(--safe-top));
+    top: calc(14px + var(--safe-top));
     right: 14px;
   }
 
   .sound-toggle {
     display: block;
-    top: calc(92px + var(--safe-top));
-    right: 14px;
+    top: calc(14px + var(--safe-top));
+    right: 88px;
   }
 
   .sound-toggle[aria-expanded="true"] {
@@ -818,12 +818,30 @@ select option:checked {
   }
 
   .status-bar > div:first-child {
-    max-width: calc(100vw - 104px);
+    max-width: calc(100vw - 138px);
   }
 
   .status-bar h1 {
     font-size: clamp(27px, 9.4vw, 36px);
     line-height: 1.08;
+  }
+
+  .theme-cycle {
+    top: calc(12px + var(--safe-top));
+    right: 12px;
+    min-width: 54px;
+    padding: 0 8px;
+  }
+
+  .sound-toggle {
+    top: calc(12px + var(--safe-top));
+    right: 74px;
+    min-width: 54px;
+    padding: 0 8px;
+  }
+
+  .inspector {
+    top: calc(54px + var(--safe-top));
   }
 
   .control-strip {
@@ -922,7 +940,7 @@ select option:checked {
   }
 
   .inspector {
-    top: 76px;
+    top: calc(18px + var(--safe-top));
   }
 
   .score-panel {
@@ -957,7 +975,7 @@ select option:checked {
 
 @media (max-width: 880px) and (max-height: 720px) {
   .inspector {
-    top: calc(132px + var(--safe-top));
+    top: calc(58px + var(--safe-top));
   }
 
   .reference-panel {
