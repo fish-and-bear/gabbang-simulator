@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+
+# Keep this repo to the selected Gabbang bundle. The full Katunog mirror is large
+# and includes instruments this simulator does not use.
+work/
+public/data/katunog-public-audio/audio/*
+!public/data/katunog-public-audio/audio/PIISD02596__gabbang/
+!public/data/katunog-public-audio/audio/PIISD02596__gabbang/*.mp3

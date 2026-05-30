@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gabbang Simulator</title>
+    <meta name="description" content="A browser-playable 3D Gabbang simulator using a trimmed Katunog Tausug gabbang sample set.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23080908'/%3E%3Cpath d='M8 23h48v18H8z' rx='6' fill='%23d2aa62'/%3E%3Cpath d='M12 31h40' stroke='%23362b1b' stroke-width='5'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="stage" aria-label="Interactive 3D Gabbang instrument"></canvas>
+
+      <section class="status-bar" aria-live="polite">
+        <div>
+          <h1>Gabbang</h1>
+          <p class="license-note">
+            Source: Katunog, DOST-ASTI and UP. Non-commercial prototype.
+          </p>
+        </div>
+      </section>
+
+      <section class="control-strip" aria-label="Instrument controls">
+        <div class="audio-status-chip is-loading" id="audioStatus" role="status" aria-live="polite">
+          <span class="mini-spinner" aria-hidden="true"></span>
+          <span id="audioStatusText">Audio loading</span>
+        </div>
+        <button id="recordToggle" type="button">Record</button>
+        <button id="playLoop" type="button" aria-label="Play loop" disabled><span class="wide-label">Play loop</span><span class="mobile-label">Loop</span></button>
+        <button id="clearLoop" type="button" disabled>Clear</button>
+      </section>
+
+      <button class="theme-cycle" id="themeCycle" type="button" aria-label="Theme: light">Light</button>
+      <button class="sound-toggle" id="soundToggle" type="button" aria-controls="soundPanel" aria-expanded="false">Sound</button>
+
+      <aside class="inspector" id="soundPanel" aria-label="Sound controls">
+        <label>
+          <span>Volume</span>
+          <input id="volume" type="range" min="0" max="1" step="0.01" value="0.82">
+        </label>
+        <label>
+          <span>Room</span>
+          <input id="room" type="range" min="0" max="1" step="0.01" value="0.28">
+        </label>
+        <label>
+          <span>Strike</span>
+          <input id="strike" type="range" min="0.35" max="1.4" step="0.01" value="0.86">
+        </label>
+        <label class="select-row">
+          <span>Scene</span>
+          <select id="backdropSelect">
+            <option value="shore">Sulu shore</option>
+            <option value="grove">Bamboo grove</option>
+            <option value="rainforest">Rainforest</option>
+            <option value="studio">Studio</option>
+          </select>
+        </label>
+      </aside>
+
+      <section class="note-readout" aria-label="Current note">
+        <span id="noteName">N1</span>
+        <span id="noteMeta">press A W S E D F T G Y H U J K O L P</span>
+      </section>
+
+      <section class="score-panel" aria-label="Practice notation" hidden>
+        <div class="score-head">
+          <div>
+            <p class="eyebrow">Practice</p>
+            <h2>Keyboard drill</h2>
+            <p class="score-source">Demo pattern, not a transcription</p>
+          </div>
+          <div class="score-tabs" role="group" aria-label="Score view">
+            <button class="active" data-score-mode="numbers" type="button">Numbers</button>
+            <button data-score-mode="staff" type="button">Staff</button>
+          </div>
+        </div>
+        <div class="score-body">
+          <div id="numberScore" class="number-score" aria-label="Numbered score"></div>
+          <svg id="staffScore" class="staff-score" aria-label="Relative staff notation"></svg>
+        </div>
+      </section>
+
+      <button class="reference-toggle" id="referenceToggle" type="button" aria-controls="referencePanel" aria-expanded="false">
+        Tune
+      </button>
+
+      <section class="reference-panel" id="referencePanel" aria-label="Reference tune" hidden>
+        <div class="reference-head">
+          <div>
+            <p class="eyebrow">Reference tune</p>
+            <h2 id="referenceTitle">Suwa-Suwa</h2>
+            <p id="referenceSource">Tausug gabbang. Listen and play along.</p>
+          </div>
+          <select id="referenceSelect" aria-label="Choose reference tune"></select>
+        </div>
+        <div class="reference-controls">
+          <button id="referencePlay" type="button">Play</button>
+          <input id="referenceSeek" type="range" min="0" max="1000" value="0" aria-label="Reference tune position">
+          <span id="referenceTime">0:00 / 0:00</span>
+        </div>
+        <audio id="referenceAudio" preload="metadata"></audio>
+      </section>
+
+      <div id="keyRail" class="key-rail" aria-label="Playable note buttons"></div>
+
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

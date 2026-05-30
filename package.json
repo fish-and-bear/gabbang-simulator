@@ -1,0 +1,18 @@
+{
+  "name": "gabbang-simulator",
+  "version": "0.1.0",
+  "description": "A browser-playable 3D Gabbang simulator using a trimmed Katunog Tausug gabbang sample set.",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
