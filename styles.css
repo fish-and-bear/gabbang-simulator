@@ -368,6 +368,10 @@ select option:checked {
   pointer-events: none;
 }
 
+.note-readout {
+  display: none !important;
+}
+
 .score-panel {
   left: 50%;
   bottom: 102px;
