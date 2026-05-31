@@ -1,0 +1,18 @@
+{
+  "name": "Gabbang",
+  "short_name": "Gabbang",
+  "description": "Play a 3D gabbang in the browser with recorded Tausug gabbang samples.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "background_color": "#0c1c21",
+  "theme_color": "#0c1c21",
+  "icons": [
+    {
+      "src": "/brand/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

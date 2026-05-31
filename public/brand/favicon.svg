@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Gabbang">
+  <rect width="64" height="64" rx="14" fill="#0c1c21"/>
+  <path d="M9 43h46" stroke="#20170e" stroke-width="7" stroke-linecap="round"/>
+  <path d="M12 21h40l-4 18H16z" fill="#d49a52"/>
+  <path d="M17 22l-3 16M24 22l-2 16M32 22v16M40 22l2 16M47 22l3 16" stroke="#7d4b25" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M14 29h37" stroke="#f2c27a" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+  <path d="M18 39h28" stroke="#3a2a18" stroke-width="3.4" stroke-linecap="round"/>
+</svg>

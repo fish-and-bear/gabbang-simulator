@@ -3,9 +3,51 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gabbang Simulator</title>
-    <meta name="description" content="A browser-playable 3D Gabbang simulator using a trimmed Katunog Tausug gabbang sample set.">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23080908'/%3E%3Cpath d='M8 23h48v18H8z' rx='6' fill='%23d2aa62'/%3E%3Cpath d='M12 31h40' stroke='%23362b1b' stroke-width='5'/%3E%3C/svg%3E">
+    <title>Gabbang | Browser Instrument Simulator</title>
+    <meta name="description" content="Play a 3D gabbang in the browser, using recorded Tausug gabbang samples and keyboard or touch controls.">
+    <meta name="robots" content="index, follow">
+    <meta name="application-name" content="Gabbang">
+    <meta name="apple-mobile-web-app-title" content="Gabbang">
+    <meta name="theme-color" content="#e8efe8" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c1c21" media="(prefers-color-scheme: dark)">
+    <link rel="canonical" href="https://gabbang.hapinas.net/">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg">
+    <meta property="og:site_name" content="Gabbang">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://gabbang.hapinas.net/">
+    <meta property="og:title" content="Gabbang">
+    <meta property="og:description" content="A playable 3D gabbang built from recorded Tausug gabbang samples.">
+    <meta property="og:image" content="https://gabbang.hapinas.net/brand/gabbang-social.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="A 3D gabbang with bamboo keys in a Sulu shore scene.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Gabbang">
+    <meta name="twitter:description" content="Play a 3D gabbang in the browser with recorded Tausug gabbang samples.">
+    <meta name="twitter:image" content="https://gabbang.hapinas.net/brand/gabbang-social.jpg">
+    <meta name="twitter:image:alt" content="A 3D gabbang with bamboo keys in a Sulu shore scene.">
+    <script>
+      if (new URLSearchParams(window.location.search).get("preview") === "social") {
+        document.documentElement.dataset.preview = "social";
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Gabbang",
+        "url": "https://gabbang.hapinas.net/",
+        "applicationCategory": "MusicApplication",
+        "operatingSystem": "Any modern browser",
+        "description": "A playable 3D gabbang built from recorded Tausug gabbang samples.",
+        "image": "https://gabbang.hapinas.net/brand/gabbang-social.jpg",
+        "inLanguage": "en",
+        "isAccessibleForFree": true
+      }
+    </script>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>

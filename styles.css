@@ -673,6 +673,30 @@ select option:checked {
   border-color: rgba(255, 212, 122, 0.75);
 }
 
+[data-preview="social"] .control-strip,
+[data-preview="social"] .theme-cycle,
+[data-preview="social"] .sound-toggle,
+[data-preview="social"] .inspector,
+[data-preview="social"] .note-readout,
+[data-preview="social"] .score-panel,
+[data-preview="social"] .reference-toggle,
+[data-preview="social"] .reference-panel,
+[data-preview="social"] .key-rail {
+  display: none !important;
+}
+
+[data-preview="social"] .status-bar {
+  top: 34px;
+  left: 44px;
+  right: auto;
+}
+
+[data-preview="social"] .status-bar h1 {
+  font-size: 76px;
+  line-height: 1;
+  text-shadow: 0 2px 0 rgba(255, 250, 232, 0.72), 0 18px 42px rgba(88, 64, 24, 0.28);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
