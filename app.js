@@ -8,12 +8,10 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { Water } from "three/addons/objects/Water.js";
-import { PalmGenerator } from "./third_party/PalmGenerator/src/PalmGenerator.js";
-import { LeafGeometry } from "./third_party/PalmGenerator/src/LeafGeometry.js";
 import {
-  addPalmCrown,
   addBambooSpray,
   createFoliageMaterial,
+  makePalmFrondGeometry,
   makeBroadLeafGeometry
 } from "./proceduralFoliage.js";
 
@@ -70,11 +68,6 @@ const STAFF_INDEX = {
 const SOURCED_MODELS = {
   bamboo: {
     url: `${POLY_PIZZA_ROOT}bamboo-poly-by-google-cc-by-3.glb`,
-    scene: null,
-    promise: null
-  },
-  shorePalm: {
-    url: `${POLY_PIZZA_ROOT}palm-tree-quaternius-cc0.glb`,
     scene: null,
     promise: null
   }
@@ -1847,23 +1840,6 @@ function cloneSourcedScene(source) {
   return clone;
 }
 
-function retintSourcedPlant(object, leafTint, trunkTint, leafMix = 0.32) {
-  object.traverse((item) => {
-    if (!item.isMesh || !item.material) return;
-    const materials = Array.isArray(item.material) ? item.material : [item.material];
-    for (const material of materials) {
-      if (!material.color) continue;
-      if (material.color.g > material.color.r && material.color.g > material.color.b) {
-        material.color.lerp(leafTint, leafMix);
-      } else {
-        material.color.lerp(trunkTint, 0.18);
-      }
-      material.roughness = Math.max(material.roughness ?? 0.7, 0.78);
-      material.needsUpdate = true;
-    }
-  });
-}
-
 function normalizeSourcedScene(object) {
   const box = new THREE.Box3().setFromObject(object);
   const center = box.getCenter(new THREE.Vector3());
@@ -1877,8 +1853,7 @@ function normalizeSourcedScene(object) {
 }
 
 function refreshBackdropAfterAssetLoad(id) {
-  const usesCurrentBackdrop = (id === "shorePalm" && state.backdrop === "shore")
-    || (id === "bamboo" && (state.backdrop === "grove" || state.backdrop === "rainforest"));
+  const usesCurrentBackdrop = id === "bamboo" && (state.backdrop === "grove" || state.backdrop === "rainforest");
   if (!usesCurrentBackdrop || sourcedRefreshFrame) return;
   sourcedRefreshFrame = window.requestAnimationFrame(() => {
     sourcedRefreshFrame = 0;
@@ -2639,7 +2614,7 @@ function makeFoliageColorSet(mode, layer) {
   if (mode === "shore") {
     return light
       ? { highlight: "rgba(84,132,82,0.92)", mid: "rgba(48,101,70,0.95)", shadow: "rgba(28,67,48,0.98)", vein: "rgba(23,62,44,0.46)" }
-      : { highlight: "rgba(73,132,102,0.58)", mid: "rgba(30,82,62,0.72)", shadow: "rgba(9,44,36,0.9)", vein: "rgba(110,177,139,0.22)" };
+      : { highlight: "rgba(38,88,68,0.44)", mid: "rgba(18,61,47,0.64)", shadow: "rgba(4,31,28,0.9)", vein: "rgba(112,170,140,0.13)" };
   }
   if (mode === "rainforest") {
     return light
@@ -2732,7 +2707,7 @@ function addFoliageScrims(parent, mode, palette, rng) {
       map: texture,
       transparent: true,
       opacity: mode === "shore"
-        ? (state.resolvedTheme === "light" ? 0.68 : 0.5) - layer * 0.09
+        ? (state.resolvedTheme === "light" ? 0.68 : 0.38) - layer * 0.08
         : (state.resolvedTheme === "light" ? 0.5 : 0.64) - layer * 0.08,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -3505,57 +3480,63 @@ function addShoreArtifacts(parent, rng) {
   }
 }
 
-function addPalmGeneratorCrown(group, crown, size, leafColor, rng) {
+function addBroadPalmCrown(group, crown, size, leafColor, rng, lower = false) {
   const light = state.resolvedTheme === "light";
-  const leafGeometry = new LeafGeometry({
-    length: size * (0.72 + rng() * 0.08),
-    length_stem: size * 0.16,
-    width_stem: size * 0.018,
-    leaf_width: 0.66,
-    leaf_up: size * 0.035,
-    density: 13,
-    curvature: 0.08 + rng() * 0.025,
-    curvature_border: 0.052 + rng() * 0.016,
-    leaf_inclination: 0.35 + rng() * 0.18
-  });
-  const geometry = new PalmGenerator(
-    leafGeometry,
-    new THREE.BoxGeometry(0.001, 0.001, 0.001),
-    {
-      spread: size * 0.012,
-      angle: 137.5,
-      num: 26,
-      growth: size * 0.006,
-      foliage_start_at: 40,
-      starting_angle_open: 36,
-      angle_open: 42,
-      trunk_regular: false,
-      vertex_colors: false
-    }
-  );
-  geometry.rotateX(-Math.PI / 2);
-  geometry.computeBoundingBox();
-  if (geometry.boundingBox) {
-    const center = new THREE.Vector3();
-    geometry.boundingBox.getCenter(center);
-    geometry.translate(-center.x, -geometry.boundingBox.max.y + size * 0.1, -center.z);
-  }
-  geometry.computeVertexNormals();
+  const material = createFoliageMaterial({ roughness: light ? 0.82 : 0.94 });
+  material.depthWrite = true;
+  const count = lower ? 8 : 12;
+  const leafGroup = new THREE.Group();
+  leafGroup.position.copy(crown);
 
-  const crownMaterial = new THREE.MeshStandardMaterial({
-    color: leafColor,
-    roughness: light ? 0.78 : 0.86,
-    metalness: 0,
-    side: THREE.DoubleSide
-  });
-  const crownMesh = new THREE.Mesh(geometry, crownMaterial);
-  crownMesh.position.copy(crown);
-  crownMesh.rotation.y = rng() * Math.PI * 2;
-  crownMesh.rotation.z = (rng() - 0.5) * 0.08;
-  crownMesh.castShadow = true;
-  crownMesh.receiveShadow = true;
-  crownMesh.userData.source = "edap/PalmGenerator";
-  group.add(crownMesh);
+  for (let i = 0; i < count; i += 1) {
+    const tier = i / Math.max(1, count - 1);
+    const angle = i * THREE.MathUtils.degToRad(137.5) + (rng() - 0.5) * 0.2 + (lower ? 0.38 : 0);
+    const leaf = new THREE.Mesh(
+      makePalmFrondGeometry({
+        length: size * (0.82 + rng() * 0.22) * (lower ? 0.78 : 1),
+        ribWidth: size * (0.012 + rng() * 0.004),
+        leafletPairs: lower ? 8 + Math.floor(rng() * 2) : 10 + Math.floor(rng() * 3),
+        leafletLength: lower ? 0.24 + rng() * 0.04 : 0.31 + rng() * 0.06,
+        leafletWidth: lower ? 0.032 + rng() * 0.008 : 0.038 + rng() * 0.012,
+        curvature: 0.07 + rng() * 0.04,
+        droop: lower ? 0.28 + rng() * 0.08 : 0.12 + tier * 0.12 + rng() * 0.05,
+        twist: (rng() - 0.5) * 0.045,
+        color: leafColor
+      }),
+      material
+    );
+    const open = lower ? 0.62 + tier * 0.18 + rng() * 0.06 : -0.04 + tier * 0.78 + rng() * 0.08;
+    leaf.rotation.order = "YXZ";
+    leaf.rotation.set(Math.PI / 2 + open, angle, (rng() - 0.5) * 0.28);
+    leaf.position.y = lower ? -size * 0.045 : -size * 0.015 + rng() * size * 0.035;
+    leaf.castShadow = true;
+    leaf.receiveShadow = true;
+    leafGroup.add(leaf);
+  }
+
+  if (!lower) {
+    const spear = new THREE.Mesh(
+      makePalmFrondGeometry({
+        length: size * 0.62,
+        ribWidth: size * 0.012,
+        leafletPairs: 7,
+        leafletLength: 0.2,
+        leafletWidth: 0.026,
+        curvature: 0.045,
+        droop: 0.02,
+        twist: 0.01,
+        color: leafColor
+      }),
+      material
+    );
+    spear.rotation.order = "YXZ";
+    spear.rotation.set(0.34, rng() * Math.PI * 2, 0);
+    spear.castShadow = true;
+    leafGroup.add(spear);
+  }
+
+  group.add(leafGroup);
+  return leafGroup;
 }
 
 function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ringMaterial, rng) {
@@ -3566,14 +3547,14 @@ function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ring
     new THREE.Vector3(x + lean * 0.72, baseY + height * 0.76, z + 0.02),
     new THREE.Vector3(x + lean, baseY + height, z)
   ]);
-  const trunk = new THREE.Mesh(new THREE.TubeGeometry(curve, 26, 0.055, 11), trunkMaterial);
+  const trunk = new THREE.Mesh(new THREE.TubeGeometry(curve, 34, 0.052, 13), trunkMaterial);
   trunk.castShadow = true;
   trunk.receiveShadow = true;
   group.add(trunk);
 
-  for (let t = 0.1; t < 0.9; t += 0.17) {
+  for (let t = 0.08; t < 0.94; t += 0.12) {
     const p = curve.getPoint(t);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.006, 6, 18), ringMaterial);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.055 + t * 0.02, 0.0045, 6, 18), ringMaterial);
     ring.position.copy(p);
     ring.rotation.x = Math.PI / 2;
     ring.scale.set(1 + t * 0.45, 1, 1);
@@ -3581,15 +3562,14 @@ function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ring
   }
 
   const crown = curve.getPoint(1);
-  const crownSize = 1.15 + rng() * 0.42;
-  addPalmGeneratorCrown(group, crown, crownSize * 0.68, leafColor, rng);
-  addPalmCrown(group, {
-    position: crown.clone().add(new THREE.Vector3(0, 0.03, 0)),
-    size: crownSize * 0.5,
-    color: leafColor,
-    rng,
-    isLight: state.resolvedTheme === "light"
-  });
+  const crownSize = 1.18 + rng() * 0.4;
+  const lowerLeafColor = new THREE.Color(leafColor)
+    .lerp(new THREE.Color(state.resolvedTheme === "light" ? 0x173821 : 0x020806), 0.34)
+    .getHex();
+  const mainCrown = addBroadPalmCrown(group, crown.clone().add(new THREE.Vector3(0, 0.015, 0)), crownSize * 0.72, leafColor, rng);
+  mainCrown.rotation.y = rng() * Math.PI * 2;
+  const lowerCrown = addBroadPalmCrown(group, crown.clone().add(new THREE.Vector3(0, -0.06, 0)), crownSize * 0.54, lowerLeafColor, rng, true);
+  lowerCrown.rotation.y = rng() * Math.PI * 2 + 0.32;
   const coconutMaterial = new THREE.MeshStandardMaterial({
     color: state.resolvedTheme === "light" ? 0x5c4526 : 0x20180d,
     roughness: 0.86,
@@ -3603,67 +3583,42 @@ function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ring
 }
 
 function addShorePalmCluster(parent, leafColor, rng) {
+  const light = state.resolvedTheme === "light";
   const trunkMaterial = new THREE.MeshStandardMaterial({
-    color: state.resolvedTheme === "light" ? 0x6a5738 : 0x2c2317,
-    roughness: 0.84,
-    metalness: 0.02
+    color: light ? 0x6a5738 : 0x221910,
+    bumpMap: woodTexture,
+    bumpScale: light ? 0.018 : 0.012,
+    roughness: light ? 0.86 : 0.92,
+    metalness: 0.01
   });
   const ringMaterial = new THREE.MeshStandardMaterial({
-    color: state.resolvedTheme === "light" ? 0x967745 : 0x47351f,
-    roughness: 0.86,
+    color: light ? 0x967745 : 0x332719,
+    roughness: 0.9,
     metalness: 0.01
   });
   const group = new THREE.Group();
-  for (const side of [-1, 1]) {
-    for (let i = 0; i < 2; i += 1) {
-      const x = side * (6.75 + i * 1.15 + rng() * 0.34);
-      const z = -5.85 + rng() * 0.62;
-      const height = 2.2 + rng() * 0.72;
-      const lean = -side * (0.2 + rng() * 0.28);
-      addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ringMaterial, rng);
-    }
-  }
-  group.userData = { kind: "sway", phase: 1.4, baseRotation: 0, strength: 0.004 };
-  parent.add(group);
-  animatedEnvironment.push(group);
-}
-
-function addSourcedShorePalms(parent, rng) {
-  const source = getSourcedModel("shorePalm");
-  if (!source) return false;
-
-  const group = new THREE.Group();
   const placements = [
-    { x: -8.65, z: -6.18, scale: 0.86, yaw: 1.0, lean: 0.014 },
-    { x: 8.4, z: -6.08, scale: 0.84, yaw: -0.9, lean: -0.014 },
-    { x: 6.72, z: -5.48, scale: 0.56, yaw: -0.38, lean: -0.008 }
+    { side: -1, x: 7.25, z: -5.86, height: 2.72, lean: 0.48 },
+    { side: -1, x: 8.55, z: -6.2, height: 2.28, lean: 0.3 },
+    { side: 1, x: 7.15, z: -5.8, height: 2.65, lean: -0.46 },
+    { side: 1, x: 8.48, z: -6.14, height: 2.18, lean: -0.3 }
   ];
-  const leafTint = new THREE.Color(state.resolvedTheme === "light" ? 0x6f9b59 : 0x2f5b41);
-  const trunkTint = new THREE.Color(state.resolvedTheme === "light" ? 0x7b5636 : 0x3a2818);
-
   for (const placement of placements) {
-    const palm = cloneSourcedScene(source);
-    retintSourcedPlant(palm, leafTint, trunkTint, state.resolvedTheme === "light" ? 0.42 : 0.28);
-    normalizeSourcedScene(palm);
-    palm.scale.setScalar(placement.scale);
-    palm.position.set(
-      placement.x + (rng() - 0.5) * 0.22,
-      -1.06,
-      placement.z + (rng() - 0.5) * 0.14
+    addCurvedPalm(
+      group,
+      placement.side * (placement.x + (rng() - 0.5) * 0.28),
+      placement.z + (rng() - 0.5) * 0.22,
+      placement.height + (rng() - 0.5) * 0.24,
+      placement.lean + (rng() - 0.5) * 0.12,
+      leafColor,
+      trunkMaterial,
+      ringMaterial,
+      rng
     );
-    palm.rotation.set(0, placement.yaw + (rng() - 0.5) * 0.16, placement.lean);
-    group.add(palm);
   }
-
-  group.userData = {
-    kind: "sway",
-    phase: 1.4,
-    baseRotation: 0,
-    strength: 0.0028
-  };
+  group.userData = { kind: "sway", phase: 1.4, baseRotation: 0, strength: light ? 0.0038 : 0.0024 };
   parent.add(group);
   animatedEnvironment.push(group);
-  return true;
 }
 
 function addSourcedBambooStand(parent, mode, rng) {
@@ -3824,7 +3779,7 @@ function addNatureGeometry(mode, palette) {
 
   const rng = makeRng(`geometry-${mode}-${state.resolvedTheme}`);
   const leafColor = mode === "shore"
-    ? (state.resolvedTheme === "light" ? 0x426d4d : 0x173c2f)
+    ? (state.resolvedTheme === "light" ? 0x426d4d : 0x0d261c)
     : (state.resolvedTheme === "light" ? 0x34683e : 0x1d5838);
   if (mode !== "shore") {
     for (let i = 0; i < 18; i += 1) {
@@ -3853,9 +3808,7 @@ function addNatureGeometry(mode, palette) {
     animatedEnvironment.push(water);
     addShoreDetailScrim(environmentGroup, rng);
     addFoliageScrims(environmentGroup, mode, palette, rng);
-    if (!addSourcedShorePalms(environmentGroup, rng)) {
-      addShorePalmCluster(environmentGroup, leafColor, rng);
-    }
+    addShorePalmCluster(environmentGroup, leafColor, rng);
     addFinishedShoreBoat(environmentGroup, rng);
     addShoreArtifacts(environmentGroup, rng);
     return;

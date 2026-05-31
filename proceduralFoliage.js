@@ -92,10 +92,10 @@ export function makePalmFrondGeometry({
   const colors = [];
   const indices = [];
   const baseColor = new THREE.Color(color);
-  const highlight = colorMix(baseColor, WHITE, 0.28);
-  const shadow = colorMix(baseColor, DEEP_GREEN, 0.45);
-  const ribColor = colorMix(baseColor, MIDRIB, 0.32);
-  const ribSegments = 18;
+  const highlight = colorMix(baseColor, WHITE, 0.18);
+  const shadow = colorMix(baseColor, DEEP_GREEN, 0.52);
+  const ribColor = colorMix(baseColor, MIDRIB, 0.24);
+  const ribSegments = Math.max(18, leafletPairs + 6);
   let prevLeft = null;
   let prevRight = null;
 
@@ -111,26 +111,66 @@ export function makePalmFrondGeometry({
     prevRight = right;
   }
 
-  for (let i = 0; i < leafletPairs; i += 1) {
-    const t = 0.09 + (i / Math.max(1, leafletPairs - 1)) * 0.84;
-    const fullness = Math.sin(t * Math.PI);
-    const rootBase = centerOnFrond(t, length, curvature, droop, twist);
-    for (const side of [-1, 1]) {
-      const asymmetry = side > 0 ? 1 : 0.94;
-      const outward = length * leafletLength * (0.5 + fullness * 0.68) * (1 - t * 0.24) * asymmetry;
-      const forward = length * (0.045 + fullness * 0.055 + t * 0.035);
-      const root = rootBase.clone().add(new THREE.Vector3(side * ribWidth * 0.35, 0, 0));
+  for (const side of [-1, 1]) {
+    const rows = Math.max(16, leafletPairs + 8);
+    let prevInner = null;
+    let prevMid = null;
+    let prevEdge = null;
+
+    for (let i = 0; i <= rows; i += 1) {
+      const t = 0.055 + (i / rows) * 0.9;
+      const fullness = Math.sin(t * Math.PI);
+      const edgeCut = i % 4 === 1 ? 0.91 : i % 4 === 3 ? 0.96 : 1;
+      const edgeWidth = length * leafletLength * (0.16 + Math.pow(fullness, 0.72) * 0.78) * (1 - t * 0.18) * edgeCut;
+      const midWidth = edgeWidth * (0.48 + fullness * 0.1);
+      const forward = length * (0.014 + t * 0.038 + fullness * 0.026);
+      const edgeDrop = -length * (0.026 + t * 0.064 + fullness * 0.028);
+      const root = centerOnFrond(t, length, curvature, droop, twist);
+      const shadeAmount = 0.12 + t * 0.18;
+      const inner = addVertex(
+        vertices,
+        colors,
+        root.clone().add(new THREE.Vector3(side * ribWidth * 0.62, 0, 0)),
+        colorMix(ribColor, highlight, 0.18)
+      );
+      const mid = addVertex(
+        vertices,
+        colors,
+        root.clone().add(new THREE.Vector3(side * midWidth, forward * 0.46, edgeDrop * 0.42)),
+        colorMix(baseColor, highlight, Math.max(0, 0.18 - t * 0.08))
+      );
+      const edge = addVertex(
+        vertices,
+        colors,
+        root.clone().add(new THREE.Vector3(side * edgeWidth, forward, edgeDrop)),
+        colorMix(baseColor, shadow, shadeAmount)
+      );
+
+      if (prevInner !== null) {
+        addQuad(indices, prevInner, prevMid, inner, mid);
+        addQuad(indices, prevMid, prevEdge, mid, edge);
+      }
+      prevInner = inner;
+      prevMid = mid;
+      prevEdge = edge;
+    }
+
+    for (let i = 1; i < rows; i += 3) {
+      const t = 0.055 + (i / rows) * 0.9;
+      const fullness = Math.sin(t * Math.PI);
+      const root = centerOnFrond(t, length, curvature, droop, twist);
+      const veinLength = length * leafletLength * (0.2 + Math.pow(fullness, 0.7) * 0.54) * (1 - t * 0.2);
       addCurvedBlade(vertices, colors, indices, {
-        root,
-        direction: new THREE.Vector3(side * outward, forward, 0),
+        root: root.clone().add(new THREE.Vector3(side * ribWidth * 0.9, length * 0.004, 0)),
+        direction: new THREE.Vector3(side * veinLength, length * (0.055 + t * 0.035), 0),
         length: 1,
-        width: length * leafletWidth * (0.38 + fullness * 0.95) * (1 - t * 0.14),
-        lift: length * (0.018 + fullness * 0.026),
-        fall: length * (0.035 + t * 0.045),
-        color: baseColor,
-        highlight,
+        width: Math.max(0.0028, length * leafletWidth * 0.18),
+        lift: length * 0.004,
+        fall: length * (0.018 + t * 0.032),
+        color: colorMix(baseColor, shadow, 0.12),
+        highlight: ribColor,
         shadow,
-        segments: 5
+        segments: 2
       });
     }
   }

@@ -36,19 +36,10 @@ Source: https://katunog.asti.dost.gov.ph
 
 Terms: https://katunog.asti.dost.gov.ph/client/terms
 
-The original simulator code is MIT licensed. The shore palm crown generator uses
-copied source from edap/PalmGenerator under AGPL-3.0:
-
-https://github.com/edap/PalmGenerator
-
 The 3D bamboo asset is from Poly Pizza / Poly by Google and is licensed under
 CC BY 3.0:
 
 https://poly.pizza/m/auVD_m-ugF0
-
-The 3D palm asset is from Poly Pizza / Quaternius and is public domain (CC0):
-
-https://poly.pizza/m/P0tgwyXBgr
 
 The Katunog audio and metadata are not MIT licensed. See `NOTICE.md`.
 
