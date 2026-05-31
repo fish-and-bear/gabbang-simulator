@@ -254,6 +254,10 @@ button.active {
   background: rgba(39, 110, 85, 0.12);
 }
 
+.audio-status-chip.ready:not(.is-loading) {
+  display: none;
+}
+
 .audio-status-chip.failed {
   border-color: rgba(168, 65, 54, 0.54);
   background: rgba(168, 65, 54, 0.1);

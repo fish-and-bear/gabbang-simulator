@@ -45,6 +45,8 @@ const CAMERA_LIMITS = {
   minDistance: 4.6,
   maxDistance: 24
 };
+const MAX_SOUND_RIPPLES = 12;
+const NOTE_COUNT = 16;
 const APPROX_STAFF = [
   "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4",
   "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5"
@@ -533,12 +535,19 @@ const localContactShadows = [];
 const animatedEnvironment = [];
 const environmentGroup = new THREE.Group();
 const harmonicWaves = [];
+const soundRippleOrigins = Array.from({ length: MAX_SOUND_RIPPLES }, () => new THREE.Vector2(0, 0));
+const soundRippleStarts = new Float32Array(MAX_SOUND_RIPPLES).fill(-100);
+const soundRippleAmps = new Float32Array(MAX_SOUND_RIPPLES);
+const soundCurtainPulses = new Float32Array(NOTE_COUNT);
+const soundCurtainNoteX = new Float32Array(NOTE_COUNT);
 const cameraTarget = new THREE.Vector3(0, 0.35, 0);
 const desiredCamera = new THREE.Vector3();
 const hotBarColor = new THREE.Color(0xffca6a);
 const idleBarColor = new THREE.Color(0xc99b50);
 const scratchColor = new THREE.Color();
 let audioLoadPromise = null;
+let soundRippleIndex = 0;
+let sceneEnergy = 0;
 let malletA;
 let malletB;
 let hemiLight;
@@ -549,7 +558,10 @@ let underLight;
 let backdropTexture;
 let floorMesh;
 let floorTexture;
+let floorBumpTexture;
 let causticsPlane;
+let soundField;
+let soundCurtain;
 let lastFrameAt = performance.now();
 let elapsedTime = 0;
 
@@ -610,6 +622,54 @@ const shadowMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.22,
   depthWrite: false
 });
+
+function enhanceBarMaterial(material, note) {
+  const uniforms = {
+    uTime: { value: 0 },
+    uHit: { value: 0 },
+    uNote: { value: note },
+    uThemeLight: { value: 1 }
+  };
+  material.userData.shaderUniforms = uniforms;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying vec2 vGabbangUv;
+        varying vec3 vGabbangWorld;`
+      )
+      .replace(
+        "#include <uv_vertex>",
+        `#include <uv_vertex>
+        vGabbangUv = uv;
+        vec4 gabbangWorld = modelMatrix * vec4(transformed, 1.0);
+        vGabbangWorld = gabbangWorld.xyz;`
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        uniform float uTime;
+        uniform float uHit;
+        uniform float uNote;
+        uniform float uThemeLight;
+        varying vec2 vGabbangUv;
+        varying vec3 vGabbangWorld;`
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float grain = sin(vGabbangUv.y * 88.0 + sin(vGabbangUv.x * 17.0 + uNote) * 2.4);
+        float node = smoothstep(0.965, 1.0, sin((vGabbangUv.y + uNote * 0.017) * 18.849) * 0.5 + 0.5);
+        float sweep = smoothstep(0.985, 1.0, sin(vGabbangUv.x * 9.0 + vGabbangUv.y * 4.0 - uTime * 1.65 + uNote) * 0.5 + 0.5);
+        vec3 warmResonance = mix(vec3(0.9, 0.44, 0.12), vec3(1.0, 0.78, 0.36), uThemeLight);
+        totalEmissiveRadiance += warmResonance * (uHit * (0.14 + node * 0.34 + grain * 0.025) + sweep * 0.022);`
+      );
+  };
+  material.customProgramCacheKey = () => "gabbang-bar-resonance-v1";
+}
 
 document.documentElement.dataset.theme = state.resolvedTheme;
 setupScene();
@@ -710,6 +770,8 @@ function setupScene() {
   createLocalContactShadows();
   createParticles();
   createFloorCaustics();
+  createSoundField();
+  createSoundCurtain();
 }
 
 function makeCylinderBetween(start, end, radius, material, radialSegments = 10) {
@@ -797,6 +859,7 @@ function createBars() {
     const length = 3.05 - i * 0.06;
     const tubeHeight = 1.28 - i * 0.035;
     const bar = new THREE.Mesh(barGeo, barMaterial.clone());
+    enhanceBarMaterial(bar.material, note);
     const idleColor = new THREE.Color().setHSL(0.09 + (i % 5) * 0.006, 0.5 + (i % 3) * 0.035, 0.42 + (i % 4) * 0.018);
     bar.material.color.copy(idleColor);
     bar.scale.set(1, 1, length / 2.95);
@@ -1418,10 +1481,73 @@ function makeFloorTexture(mode) {
   return texture;
 }
 
+function makeFloorBumpTexture(mode) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const rng = makeRng(`floor-bump-${mode}-${state.resolvedTheme}`);
+  const image = ctx.createImageData(canvas.width, canvas.height);
+  const data = image.data;
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const i = (y * canvas.width + x) * 4;
+      let hash = (x * 73856093) ^ (y * 19349663);
+      hash = (hash ^ (hash >>> 13)) * 1274126177;
+      const noise = ((hash >>> 0) / 4294967295) - 0.5;
+      let value;
+      if (mode === "shore") {
+        const ripple = Math.sin(y * 0.12 + Math.sin(x * 0.013) * 7) * 9;
+        const cross = Math.sin((x + y) * 0.021) * 4;
+        value = 128 + ripple + cross + noise * 34;
+      } else if (mode === "studio") {
+        const weaveX = Math.sin(x * 0.24) * 13;
+        const weaveY = Math.sin(y * 0.21) * 10;
+        value = 124 + weaveX + weaveY + noise * 18;
+      } else {
+        const leafVein = Math.sin((x * 0.035 + y * 0.016)) * 18;
+        const soil = Math.sin(x * 0.07) * Math.sin(y * 0.055) * 9;
+        value = 118 + leafVein + soil + noise * 42;
+      }
+      const clamped = Math.max(18, Math.min(238, value));
+      data[i] = clamped;
+      data[i + 1] = clamped;
+      data[i + 2] = clamped;
+      data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+
+  if (mode === "shore") {
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < 150; i += 1) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.035 + rng() * 0.07})`;
+      ctx.lineWidth = 1 + rng() * 1.7;
+      ctx.beginPath();
+      const x = rng() * canvas.width;
+      const y = rng() * canvas.height;
+      ctx.ellipse(x, y, 7 + rng() * 22, 1.3 + rng() * 4, rng() * Math.PI, 0, Math.PI * 1.5);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(mode === "shore" ? 3.15 : 2.3, mode === "shore" ? 2.8 : 2.3);
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  return texture;
+}
+
 function applyFloorSurface(mode) {
   if (floorTexture) floorTexture.dispose();
+  if (floorBumpTexture) floorBumpTexture.dispose();
   floorTexture = makeFloorTexture(mode);
+  floorBumpTexture = makeFloorBumpTexture(mode);
   floorMaterial.map = floorTexture;
+  floorMaterial.bumpMap = floorBumpTexture;
+  floorMaterial.bumpScale = mode === "shore" ? 0.038 : mode === "studio" ? 0.026 : 0.045;
   floorMaterial.color.set(mode === "shore" ? 0xe7d8ba : 0xffffff);
   floorMaterial.roughness = mode === "shore" ? 1 : mode === "studio" ? 0.92 : 0.86;
   floorMaterial.metalness = 0;
@@ -1480,6 +1606,133 @@ function createFloorCaustics() {
   causticsPlane.userData.kind = "caustics";
   scene.add(causticsPlane);
   animatedEnvironment.push(causticsPlane);
+}
+
+function createSoundField() {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uThemeLight: { value: state.resolvedTheme === "light" ? 1 : 0 },
+      uRippleOrigin: { value: soundRippleOrigins },
+      uRippleStart: { value: soundRippleStarts },
+      uRippleAmp: { value: soundRippleAmps }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorld;
+      void main() {
+        vUv = uv;
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorld = world.xyz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: `
+      #define MAX_RIPPLES ${MAX_SOUND_RIPPLES}
+      uniform float uTime;
+      uniform float uThemeLight;
+      uniform vec2 uRippleOrigin[MAX_RIPPLES];
+      uniform float uRippleStart[MAX_RIPPLES];
+      uniform float uRippleAmp[MAX_RIPPLES];
+      varying vec2 vUv;
+      varying vec3 vWorld;
+      void main() {
+        float energy = 0.0;
+        float fine = 0.0;
+        for (int i = 0; i < MAX_RIPPLES; i++) {
+          float age = uTime - uRippleStart[i];
+          if (age > 0.0 && age < 2.35) {
+            float dist = distance(vWorld.xz, uRippleOrigin[i]);
+            float radius = age * 1.72;
+            float band = 1.0 - smoothstep(0.0, 0.16 + age * 0.035, abs(dist - radius));
+            float wake = 1.0 - smoothstep(0.0, 0.42 + age * 0.12, abs(dist - radius * 0.55));
+            float fade = pow(1.0 - age / 2.35, 1.45);
+            float thread = sin(dist * 24.0 - age * 26.0) * 0.5 + 0.5;
+            energy += (band * (0.7 + thread * 0.3) + wake * 0.16) * fade * uRippleAmp[i];
+            fine += band * thread * fade;
+          }
+        }
+        float edgeFade = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x)
+          * smoothstep(0.0, 0.18, vUv.y) * smoothstep(1.0, 0.82, vUv.y);
+        vec3 darkColor = vec3(0.97, 0.62, 0.2);
+        vec3 lightColor = vec3(0.78, 0.38, 0.08);
+        vec3 color = mix(darkColor, lightColor, uThemeLight);
+        color = mix(color, vec3(0.96, 0.86, 0.42), fine * 0.24);
+        float alpha = clamp(energy * edgeFade * mix(0.34, 0.22, uThemeLight), 0.0, 0.42);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide
+  });
+  soundField = new THREE.Mesh(new THREE.PlaneGeometry(12.8, 4.75, 1, 1), material);
+  soundField.rotation.x = -Math.PI / 2;
+  soundField.position.set(0, -1.032, 0.22);
+  soundField.renderOrder = 4;
+  scene.add(soundField);
+}
+
+function createSoundCurtain() {
+  bars.forEach((bar, index) => {
+    soundCurtainNoteX[index] = bar.position.x;
+  });
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uThemeLight: { value: state.resolvedTheme === "light" ? 1 : 0 },
+      uPulses: { value: soundCurtainPulses },
+      uNoteX: { value: soundCurtainNoteX }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      #define NOTE_COUNT ${NOTE_COUNT}
+      uniform float uTime;
+      uniform float uThemeLight;
+      uniform float uPulses[NOTE_COUNT];
+      uniform float uNoteX[NOTE_COUNT];
+      varying vec2 vUv;
+      void main() {
+        float localX = mix(-6.25, 6.25, vUv.x);
+        float field = 0.0;
+        float filaments = 0.0;
+        for (int i = 0; i < NOTE_COUNT; i++) {
+          float pulse = uPulses[i];
+          float dx = localX - uNoteX[i];
+          float column = exp(-dx * dx * 3.6);
+          float waveA = sin(vUv.y * 27.0 + dx * 2.2 - uTime * (3.0 + float(i) * 0.045) + float(i) * 0.58) * 0.5 + 0.5;
+          float waveB = sin(vUv.y * 57.0 - dx * 1.6 + uTime * 1.35 + float(i) * 1.13) * 0.5 + 0.5;
+          field += column * pulse * (0.34 + waveA * 0.42);
+          filaments += column * pulse * smoothstep(0.86, 1.0, waveB) * 0.55;
+        }
+        float verticalFade = smoothstep(0.02, 0.26, vUv.y) * smoothstep(1.0, 0.58, vUv.y);
+        float sideFade = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x);
+        vec3 lightTone = vec3(0.92, 0.47, 0.12);
+        vec3 darkTone = vec3(1.0, 0.72, 0.33);
+        vec3 color = mix(darkTone, lightTone, uThemeLight);
+        color = mix(color, vec3(0.64, 0.9, 0.78), filaments * mix(0.36, 0.18, uThemeLight));
+        float alpha = clamp((field * 0.42 + filaments * 0.28) * verticalFade * sideFade, 0.0, 0.46);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide
+  });
+  soundCurtain = new THREE.Mesh(new THREE.PlaneGeometry(12.9, 2.35, 1, 1), material);
+  soundCurtain.position.set(0, 0.56, -1.96);
+  soundCurtain.renderOrder = 5;
+  scene.add(soundCurtain);
 }
 
 function createMotes(mode) {
@@ -2064,10 +2317,12 @@ function makeWaterMaterial() {
       uColorA: { value: new THREE.Color(light ? 0x80b7bd : 0x123b45) },
       uColorB: { value: new THREE.Color(light ? 0xe8dcc0 : 0x274f54) },
       uFoam: { value: new THREE.Color(light ? 0xf8f4de : 0x93d6ce) },
-      uOpacity: { value: light ? 0.28 : 0.36 }
+      uOpacity: { value: light ? 0.28 : 0.36 },
+      uEnergy: { value: 0 }
     },
     vertexShader: `
       uniform float uTime;
+      uniform float uEnergy;
       varying vec2 vUv;
       varying float vWave;
       void main() {
@@ -2075,6 +2330,7 @@ function makeWaterMaterial() {
         vec3 pos = position;
         float wave = sin(pos.x * 1.45 + uTime * 0.75) * 0.045;
         wave += sin(pos.y * 3.2 - uTime * 1.05) * 0.024;
+        wave += sin(length(pos.xy) * 4.5 - uTime * 3.0) * uEnergy * 0.035;
         pos.z += wave;
         vWave = wave;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -2086,6 +2342,7 @@ function makeWaterMaterial() {
       uniform vec3 uFoam;
       uniform float uOpacity;
       uniform float uTime;
+      uniform float uEnergy;
       varying vec2 vUv;
       varying float vWave;
       void main() {
@@ -2094,10 +2351,10 @@ function makeWaterMaterial() {
         float lineB = sin(vUv.y * 44.0 - vUv.x * 3.0 + uTime * 0.62);
         float foam = smoothstep(0.93, 0.985, lineA * 0.5 + 0.5) * 0.13;
         foam += smoothstep(0.965, 0.995, lineB * 0.5 + 0.5) * 0.06;
-        foam *= smoothstep(0.04, 0.32, vUv.y);
+        foam *= smoothstep(0.04, 0.32, vUv.y) * (1.0 + uEnergy * 1.5);
         vec3 color = mix(uColorA, uColorB, vUv.y + vWave * 2.0);
         color = mix(color, uFoam, foam);
-        gl_FragColor = vec4(color, uOpacity);
+        gl_FragColor = vec4(color, uOpacity + uEnergy * 0.035);
       }
     `,
     transparent: true,
@@ -2893,6 +3150,8 @@ function addNatureGeometry(mode, palette) {
     addWaterGlints(environmentGroup, rng);
     addShoreFoamBands(environmentGroup, rng);
     addForegroundLeaves(environmentGroup, mode, leafColor, rng);
+    addFinishedShoreBoat(environmentGroup, rng);
+    addShorePalmCluster(environmentGroup, leafColor, rng);
     addShoreArtifacts(environmentGroup, rng);
     return;
   }
@@ -3721,6 +3980,7 @@ function triggerVisual(note, velocity) {
   spawnRing(bar.position, note);
   spawnBarFlash(bar, note, velocity);
   spawnHarmonicWave(bar.position, note, velocity);
+  registerSoundRipple(bar.position, velocity, note);
   moveMallet(note);
 }
 
@@ -3861,9 +4121,26 @@ function spawnHarmonicWave(position, note, velocity) {
   harmonicWaves.push(wave);
 }
 
+function registerSoundRipple(position, velocity, note) {
+  const index = soundRippleIndex;
+  soundRippleOrigins[index].set(position.x, position.z);
+  soundRippleStarts[index] = elapsedTime;
+  soundRippleAmps[index] = Math.max(0.24, velocity);
+  soundRippleIndex = (soundRippleIndex + 1) % MAX_SOUND_RIPPLES;
+  soundCurtainPulses[note - 1] = Math.max(soundCurtainPulses[note - 1] || 0, velocity);
+  sceneEnergy = Math.min(1.4, sceneEnergy + velocity * 0.18);
+}
+
 function updateVisuals(delta, elapsed) {
+  sceneEnergy = Math.max(0, sceneEnergy - delta * 0.72);
   for (const bar of bars) {
     const hit = bar.userData.hit;
+    const uniforms = bar.material.userData.shaderUniforms;
+    if (uniforms) {
+      uniforms.uTime.value = elapsed;
+      uniforms.uHit.value = Math.max(hit, bar === state.hovered ? 0.12 : 0);
+      uniforms.uThemeLight.value = state.resolvedTheme === "light" ? 1 : 0;
+    }
     if (hit > 0) {
       bar.userData.hit = Math.max(0, hit - delta * 3.8);
       const wobble = Math.sin((1 - hit) * 22) * 0.08 * hit;
@@ -3914,6 +4191,7 @@ function updateVisuals(delta, elapsed) {
   updateRings(delta);
   updateBarFlashes(delta);
   updateHarmonicWaves(delta, elapsed);
+  updateSoundField(delta, elapsed);
 }
 
 function updateResonators(delta, elapsed) {
@@ -3954,14 +4232,15 @@ function updateEnvironment(delta, elapsed) {
     const kind = item.userData.kind;
     if (kind === "water") {
       item.material.uniforms.uTime.value = elapsed;
+      item.material.uniforms.uEnergy.value = sceneEnergy;
     } else if (kind === "caustics") {
-      item.material.opacity = item.userData.baseOpacity ?? (state.resolvedTheme === "light" ? 0.06 : 0.14);
-      item.material.map.offset.x = elapsed * 0.018;
+      item.material.opacity = (item.userData.baseOpacity ?? (state.resolvedTheme === "light" ? 0.06 : 0.14)) * (1 + sceneEnergy * 0.55);
+      item.material.map.offset.x = elapsed * (0.018 + sceneEnergy * 0.008);
       item.material.map.offset.y = Math.sin(elapsed * 0.14) * 0.03;
     } else if (kind === "shaft") {
       item.position.x = item.userData.baseX + Math.sin(elapsed * 0.07 + item.userData.phase) * 0.18;
       item.rotation.z = item.userData.baseRotationZ + Math.sin(elapsed * 0.11 + item.userData.phase) * 0.035;
-      item.material.opacity = item.userData.baseOpacity * (0.78 + Math.sin(elapsed * 0.18 + item.userData.phase) * 0.16);
+      item.material.opacity = item.userData.baseOpacity * (0.78 + Math.sin(elapsed * 0.18 + item.userData.phase) * 0.16 + sceneEnergy * 0.16);
     } else if (kind === "motes") {
       const positions = item.geometry.attributes.position.array;
       const { base, phases } = item.userData;
@@ -3980,9 +4259,9 @@ function updateEnvironment(delta, elapsed) {
       item.rotation.z = item.userData.baseRotation + Math.sin(elapsed * 0.9 + item.userData.phase) * item.userData.strength;
     } else if (kind === "glint") {
       const pulse = 0.5 + Math.sin(elapsed * 0.72 + item.userData.phase) * 0.5;
-      item.material.opacity = item.userData.baseOpacity * (0.32 + pulse * 0.78);
+      item.material.opacity = item.userData.baseOpacity * (0.32 + pulse * 0.78 + sceneEnergy * 0.42);
       item.position.x = item.userData.baseX + Math.sin(elapsed * 0.13 + item.userData.phase) * 0.18;
-      item.scale.x = item.userData.baseScaleX * (0.7 + pulse * 0.75);
+      item.scale.x = item.userData.baseScaleX * (0.7 + pulse * 0.75 + sceneEnergy * 0.18);
     } else if (kind === "floating") {
       item.position.y = item.userData.baseY + Math.sin(elapsed * 0.7 + item.userData.phase) * 0.035;
       item.rotation.y = item.userData.baseRotationY + Math.sin(elapsed * 0.33 + item.userData.phase) * 0.045;
@@ -3993,7 +4272,7 @@ function updateEnvironment(delta, elapsed) {
       const { base, baseColors, phases } = item.userData;
       for (let i = 0; i < phases.length; i += 1) {
         const offset = i * 3;
-        const pulse = 0.44 + Math.sin(elapsed * (0.8 + (i % 5) * 0.08) + phases[i]) * 0.42;
+        const pulse = 0.44 + Math.sin(elapsed * (0.8 + (i % 5) * 0.08) + phases[i]) * 0.42 + sceneEnergy * 0.18;
         positions[offset] = base[offset] + Math.sin(elapsed * 0.24 + phases[i]) * 0.32;
         positions[offset + 1] = base[offset + 1] + Math.sin(elapsed * 0.31 + phases[i] * 1.9) * 0.22;
         positions[offset + 2] = base[offset + 2] + Math.cos(elapsed * 0.2 + phases[i]) * 0.28;
@@ -4004,7 +4283,7 @@ function updateEnvironment(delta, elapsed) {
       item.geometry.attributes.position.needsUpdate = true;
       item.geometry.attributes.color.needsUpdate = true;
     } else if (kind === "lantern") {
-      const flicker = 0.88 + Math.sin(elapsed * 2.1 + item.userData.phase) * 0.08 + Math.sin(elapsed * 5.2 + item.userData.phase) * 0.035;
+      const flicker = 0.88 + Math.sin(elapsed * 2.1 + item.userData.phase) * 0.08 + Math.sin(elapsed * 5.2 + item.userData.phase) * 0.035 + sceneEnergy * 0.08;
       item.userData.light.intensity = item.userData.baseIntensity * flicker;
       item.userData.shadeMaterial.emissiveIntensity = (state.resolvedTheme === "light" ? 0.18 : 0.9) * flicker;
     }
@@ -4012,7 +4291,28 @@ function updateEnvironment(delta, elapsed) {
   if (rimLight) {
     rimLight.position.x = 5.8 + Math.sin(elapsed * 0.24) * 0.38;
     rimLight.position.z = -5.2 + Math.cos(elapsed * 0.18) * 0.26;
+    rimLight.intensity = (state.resolvedTheme === "light" ? 1.7 : 2.5) + sceneEnergy * (state.resolvedTheme === "light" ? 0.22 : 0.42);
   }
+}
+
+function updateSoundField(delta, elapsed) {
+  const themeLight = state.resolvedTheme === "light" ? 1 : 0;
+  if (soundField) {
+    soundField.material.uniforms.uTime.value = elapsed;
+    soundField.material.uniforms.uThemeLight.value = themeLight;
+  }
+  if (soundCurtain) {
+    let strongestPulse = 0;
+    for (let i = 0; i < soundCurtainPulses.length; i += 1) {
+      soundCurtainPulses[i] = Math.max(0, soundCurtainPulses[i] - delta * 0.62);
+      strongestPulse = Math.max(strongestPulse, soundCurtainPulses[i]);
+    }
+    soundCurtain.material.uniforms.uTime.value = elapsed;
+    soundCurtain.material.uniforms.uThemeLight.value = themeLight;
+    soundCurtain.visible = strongestPulse > 0.01 || sceneEnergy > 0.01;
+    soundCurtain.position.y = 0.56 + Math.sin(elapsed * 1.1) * 0.012;
+  }
+  bloom.strength = (state.resolvedTheme === "light" ? 0.08 : 0.48) + sceneEnergy * (state.resolvedTheme === "light" ? 0.04 : 0.08);
 }
 
 function updateParticles(delta) {
