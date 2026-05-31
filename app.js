@@ -4119,7 +4119,8 @@ function syncSoundPanelState() {
 
 function setSoundPanelOpen(open) {
   state.soundOpen = open;
-  els.soundToggle.textContent = open ? "Hide" : "Sound";
+  els.soundToggle.setAttribute("aria-label", open ? "Hide sound settings" : "Sound settings");
+  els.soundToggle.title = open ? "Hide sound settings" : "Sound settings";
   els.soundToggle.setAttribute("aria-expanded", String(open));
   syncSoundPanelState();
 }
