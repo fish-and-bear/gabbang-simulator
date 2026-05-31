@@ -679,17 +679,6 @@ select option:checked {
   }
 }
 
-.license-note {
-  max-width: min(390px, 100%);
-  margin: 7px 0 0;
-  color: color-mix(in srgb, var(--title-color) 68%, transparent);
-  font-size: 11px;
-  line-height: 1.25;
-  text-align: left;
-  pointer-events: none;
-  text-shadow: 0 8px 20px rgba(0, 0, 0, 0.38);
-}
-
 @media (max-width: 880px) {
   .status-bar {
     top: calc(14px + var(--safe-top));
