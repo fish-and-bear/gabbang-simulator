@@ -770,8 +770,6 @@ function setupScene() {
   createLocalContactShadows();
   createParticles();
   createFloorCaustics();
-  createSoundField();
-  createSoundCurtain();
 }
 
 function makeCylinderBetween(start, end, radius, material, radialSegments = 10) {
@@ -3977,10 +3975,7 @@ function triggerVisual(note, velocity) {
   });
   underLight.userData.pulse = Math.max(underLight.userData.pulse || 0, velocity);
   spawnParticles(bar.position, note, velocity);
-  spawnRing(bar.position, note);
   spawnBarFlash(bar, note, velocity);
-  spawnHarmonicWave(bar.position, note, velocity);
-  registerSoundRipple(bar.position, velocity, note);
   moveMallet(note);
 }
 
