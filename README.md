@@ -24,6 +24,9 @@ public/data/katunog-public-audio/audio/PIISD02596__gabbang/*.mp3
 
 The full Katunog mirror is not included.
 
+The bundled MP3s are audio-only copies of the selected Katunog files. Embedded
+cover art was removed so the simulator can load quickly in the browser.
+
 ## Attribution
 
 Audio and metadata are from Katunog, the Philippine Indigenous Instrument Sounds

@@ -8,6 +8,9 @@ This folder intentionally contains only the files used by the simulator:
 The source archive downloaded during research contained many more instruments.
 Those files are excluded from this repository.
 
+These MP3s are audio-only copies with embedded cover art removed. The sound data
+was copied without re-encoding where possible.
+
 Audio and metadata source: https://katunog.asti.dost.gov.ph
 
 Terms of use: https://katunog.asti.dost.gov.ph/client/terms

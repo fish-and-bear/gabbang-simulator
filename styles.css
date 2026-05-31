@@ -227,6 +227,7 @@ button.active {
 .audio-status-chip {
   min-height: 38px;
   min-width: 132px;
+  max-width: 148px;
   padding: 0 13px;
   display: inline-flex;
   align-items: center;
@@ -238,6 +239,14 @@ button.active {
   color: var(--text);
   font-weight: 720;
   box-shadow: 0 10px 28px var(--shadow);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.audio-status-chip span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .audio-status-chip.ready {
@@ -846,7 +855,7 @@ select option:checked {
 
   .control-strip {
     display: grid;
-    grid-template-columns: 0.86fr repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(72px, 0.9fr) repeat(3, minmax(0, 1fr));
     gap: 6px;
     overflow: visible;
   }
@@ -864,6 +873,7 @@ select option:checked {
   .audio-status-chip {
     gap: 4px;
     font-size: 12px;
+    max-width: none;
   }
 
   .audio-status-chip .mini-spinner {

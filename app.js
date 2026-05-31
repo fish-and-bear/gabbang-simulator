@@ -15,7 +15,7 @@ const GABBANG_CONTROL = "PIISD02596";
 const NOTE_KEYS = ["A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L", "P"];
 const KEY_TO_NOTE = new Map(NOTE_KEYS.map((key, index) => [key.toLowerCase(), index + 1]));
 const LONG_PIECE_PATTERN = /PIECE|SAMPLE|ENSEMBLE/i;
-const AUDIO_LOAD_CONCURRENCY = 8;
+const AUDIO_LOAD_CONCURRENCY = 10;
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 const MOBILE_CONTROLS_MEDIA = window.matchMedia("(max-width: 880px)");
@@ -39,8 +39,8 @@ const CAMERA_LIMITS = {
   maxYaw: 0.75,
   minPitch: 0.22,
   maxPitch: 1.535,
-  minDistance: 5.2,
-  maxDistance: 15.5
+  minDistance: 4.6,
+  maxDistance: 24
 };
 const APPROX_STAFF = [
   "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4",
@@ -75,6 +75,10 @@ const state = {
   cameraDownY: 0,
   cameraLastX: 0,
   cameraLastY: 0,
+  cameraPointers: new Map(),
+  pinchZooming: false,
+  pinchStartDistance: 0,
+  pinchStartCameraDistance: 0,
   pointer: new THREE.Vector2(),
   hovered: null,
   loadedCount: 0,
@@ -88,7 +92,7 @@ const state = {
   referenceTune: "suwa-suwa",
   referenceOpen: false,
   soundOpen: false,
-  audioStatusText: "Audio loading",
+  audioStatusText: "Loading",
   pendingPlays: []
 };
 
@@ -195,9 +199,17 @@ class AudioEngine {
   async loadSamples(samplesByNote) {
     await this.init({ resume: false });
     this.buffers.clear();
-    const entries = [...samplesByNote.entries()].flatMap(([note, samples]) =>
-      samples.map((sample) => ({ note, sample }))
-    );
+    const entries = [];
+    const firstPass = [];
+    const rest = [];
+    for (const [note, samples] of samplesByNote.entries()) {
+      samples.forEach((sample, index) => {
+        const entry = { note, sample };
+        entries.push(entry);
+        if (index === 0) firstPass.push(entry);
+        else rest.push(entry);
+      });
+    }
     state.totalCount = entries.length;
     updateLoad(0, entries.length, "Decoding samples");
 
@@ -214,15 +226,24 @@ class AudioEngine {
       updateLoad(loaded, entries.length, "Decoding samples");
     };
 
-    const workers = Array.from({ length: Math.min(AUDIO_LOAD_CONCURRENCY, entries.length) }, async () => {
-      while (nextIndex < entries.length) {
-        const entry = entries[nextIndex];
-        nextIndex += 1;
-        await loadOne(entry);
-      }
-    });
+    const loadBatch = async (batch) => {
+      nextIndex = 0;
+      const workers = Array.from({ length: Math.min(AUDIO_LOAD_CONCURRENCY, batch.length) }, async () => {
+        while (nextIndex < batch.length) {
+          const entry = batch[nextIndex];
+          nextIndex += 1;
+          await loadOne(entry);
+        }
+      });
+      await Promise.all(workers);
+    };
 
-    await Promise.all(workers);
+    await loadBatch(firstPass);
+    if (rest.length) {
+      loadBatch(rest)
+        .then(() => updateLoad(entries.length, entries.length, "Ready"))
+        .catch((error) => console.warn("Alternate samples did not finish loading", error));
+    }
   }
 
   async play(note, velocity = 1, when = 0, options = {}) {
@@ -418,7 +439,7 @@ async function init() {
   setSoundPanelOpen(state.soundOpen);
   wireUi();
   applyThemeChoice(state.themeChoice);
-  setAudioStatus("Audio loading", true);
+  setAudioStatus("Loading", true);
   updateLoad(0, 1, "Reading Katunog manifest");
   audio.init({ resume: false }).catch((error) => console.warn("Audio setup deferred", error));
   try {
@@ -432,7 +453,7 @@ async function init() {
     beginAudioLoad().catch((error) => console.error(error));
   } catch (error) {
     if (els.loadText) els.loadText.textContent = "Could not read samples";
-    setAudioStatus("Audio failed", false, true);
+    setAudioStatus("Failed", false, true);
     console.error(error);
   }
 }
@@ -3120,7 +3141,7 @@ function wireUi() {
   els.canvas.addEventListener("pointerdown", pointerDown);
   els.canvas.addEventListener("pointerup", pointerUp);
   els.canvas.addEventListener("pointercancel", pointerUp);
-  els.canvas.addEventListener("lostpointercapture", endCameraDrag);
+  els.canvas.addEventListener("lostpointercapture", lostPointer);
   els.canvas.addEventListener("wheel", wheelCamera, { passive: false });
   els.canvas.addEventListener("pointerleave", () => {
     if (!state.cameraDragging) state.hovered = null;
@@ -3168,6 +3189,15 @@ function clampCameraYaw(yaw) {
 }
 
 function pointerMove(event) {
+  if (state.cameraPointers.has(event.pointerId)) {
+    state.cameraPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+  if (state.pinchZooming && state.cameraPointers.size >= 2) {
+    event.preventDefault();
+    updatePinchZoom();
+    return;
+  }
+
   updatePointer(event);
   if (event.pointerId === state.cameraPointerId) {
     event.preventDefault();
@@ -3201,6 +3231,17 @@ function pointerMove(event) {
 
 function pointerDown(event) {
   event.preventDefault();
+  state.cameraPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try {
+    els.canvas.setPointerCapture(event.pointerId);
+  } catch (error) {
+    console.warn("Camera pointer capture skipped", error);
+  }
+  if (state.cameraPointers.size >= 2) {
+    beginPinchZoom();
+    return;
+  }
+
   updatePointer(event);
   state.hovered = getHoveredBar();
   state.cameraPointerId = event.pointerId;
@@ -3208,11 +3249,6 @@ function pointerDown(event) {
   state.cameraDownY = event.clientY;
   state.cameraLastX = event.clientX;
   state.cameraLastY = event.clientY;
-  try {
-    els.canvas.setPointerCapture(event.pointerId);
-  } catch (error) {
-    console.warn("Camera pointer capture skipped", error);
-  }
   if (state.hovered) {
     const velocity = 0.68 + Math.min(0.32, Math.abs(event.movementY || 0) / 60);
     triggerNote(state.hovered.userData.note, velocity);
@@ -3227,7 +3263,21 @@ function beginCameraDrag() {
 }
 
 function pointerUp(event) {
+  state.cameraPointers.delete(event.pointerId);
+  if (state.pinchZooming) {
+    if (state.cameraPointers.size < 2) endPinchZoom(event);
+    return;
+  }
   if (event.pointerId !== state.cameraPointerId) return;
+  endCameraDrag(event);
+}
+
+function lostPointer(event) {
+  state.cameraPointers.delete(event.pointerId);
+  if (state.pinchZooming) {
+    if (state.cameraPointers.size < 2) endPinchZoom(event);
+    return;
+  }
   endCameraDrag(event);
 }
 
@@ -3246,6 +3296,45 @@ function endCameraDrag(event) {
   if (wasDragging) state.cameraMode = "free";
 }
 
+function getPinchDistance() {
+  const points = [...state.cameraPointers.values()];
+  if (points.length < 2) return 0;
+  return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+}
+
+function beginPinchZoom() {
+  state.hovered = null;
+  state.cameraDragging = false;
+  state.cameraPointerId = null;
+  state.pinchZooming = true;
+  state.pinchStartDistance = Math.max(1, getPinchDistance());
+  state.pinchStartCameraDistance = state.cameraDistance;
+  els.canvas.classList.add("dragging-view");
+}
+
+function updatePinchZoom() {
+  const distance = getPinchDistance();
+  if (!distance) return;
+  state.cameraDistance = THREE.MathUtils.clamp(
+    state.pinchStartCameraDistance * (state.pinchStartDistance / distance),
+    CAMERA_LIMITS.minDistance,
+    CAMERA_LIMITS.maxDistance
+  );
+  state.cameraMode = "free";
+}
+
+function endPinchZoom(event) {
+  state.pinchZooming = false;
+  state.pinchStartDistance = 0;
+  state.pinchStartCameraDistance = state.cameraDistance;
+  els.canvas.classList.remove("dragging-view");
+  try {
+    if (event?.pointerId !== null && event?.pointerId !== undefined) els.canvas.releasePointerCapture(event.pointerId);
+  } catch (error) {
+    console.warn("Camera pointer release skipped", error);
+  }
+}
+
 function wheelCamera(event) {
   event.preventDefault();
   const scale = Math.exp(event.deltaY * 0.001);
@@ -3262,12 +3351,12 @@ function getCameraPreset(mode) {
   const presets = narrow
     ? {
         performer: { yaw: 0, pitch: 0.56, distance: 13.15 },
-        overhead: { yaw: 0, pitch: 1.535, distance: 12.25 },
+        overhead: { yaw: 0, pitch: 1.535, distance: 15.2 },
         detail: { yaw: 0.59, pitch: 0.64, distance: 9.2 }
       }
     : {
-        performer: { yaw: 0, pitch: 0.58, distance: 11.2 },
-        overhead: { yaw: 0, pitch: 1.535, distance: 11.4 },
+        performer: { yaw: 0, pitch: 0.58, distance: 13.2 },
+        overhead: { yaw: 0, pitch: 1.535, distance: 14.5 },
         detail: { yaw: 0.63, pitch: 0.64, distance: 8.05 }
       };
   return presets[mode] || presets.performer;
@@ -3309,7 +3398,7 @@ async function beginAudioLoad() {
   audioLoadPromise = (async () => {
     state.loading = true;
     state.loadFailed = false;
-    setAudioStatus("Audio loading", true);
+    setAudioStatus("Loading", true);
 
     while (!state.samples.size) {
       await wait(40);
@@ -3324,19 +3413,19 @@ async function beginAudioLoad() {
       state.loadFailed = false;
       updateLoad(state.totalCount, state.totalCount, "Ready");
       window.__GABBANG_READY = true;
-      setAudioStatus("Audio ready", false);
+      setAudioStatus("Ready", false);
     } catch (error) {
       state.ready = false;
       state.audioUnlocked = false;
       state.loadFailed = true;
       audioLoadPromise = null;
       if (els.loadText) els.loadText.textContent = "Audio load failed";
-      setAudioStatus("Audio failed", false, true);
+      setAudioStatus("Failed", false, true);
       console.error(error);
       throw error;
     } finally {
       state.loading = false;
-      if (!state.ready && !state.loadFailed) setAudioStatus("Audio loading", false);
+      if (!state.ready && !state.loadFailed) setAudioStatus("Loading", false);
     }
   })();
 
