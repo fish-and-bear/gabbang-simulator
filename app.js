@@ -112,6 +112,7 @@ const state = {
   scoreIndex: -1,
   referenceTune: "suwa-suwa",
   referenceOpen: false,
+  aboutOpen: false,
   soundOpen: false,
   audioStatusText: "Loading"
 };
@@ -140,6 +141,9 @@ const els = {
   staffScore: document.getElementById("staffScore"),
   referencePanel: document.getElementById("referencePanel"),
   referenceToggle: document.getElementById("referenceToggle"),
+  aboutPanel: document.getElementById("aboutPanel"),
+  aboutToggle: document.getElementById("aboutToggle"),
+  aboutClose: document.getElementById("aboutClose"),
   referenceAudio: document.getElementById("referenceAudio"),
   referencePlay: document.getElementById("referencePlay"),
   referenceSeek: document.getElementById("referenceSeek"),
@@ -659,6 +663,7 @@ async function init() {
   createScore();
   setupReferenceTune();
   setReferencePanelOpen(state.referenceOpen);
+  setAboutPanelOpen(state.aboutOpen);
   setSoundPanelOpen(state.soundOpen);
   wireUi();
   applyThemeChoice(state.themeChoice);
@@ -4085,10 +4090,24 @@ function setReferencePanelOpen(open) {
   els.referenceToggle.textContent = open ? "Hide tune" : "Tune";
   els.referenceToggle.setAttribute("aria-expanded", String(open));
   document.documentElement.dataset.referenceOpen = open ? "true" : "false";
+  if (open && state.aboutOpen) setAboutPanelOpen(false);
 }
 
 function toggleReferencePanel() {
   setReferencePanelOpen(!state.referenceOpen);
+}
+
+function setAboutPanelOpen(open) {
+  state.aboutOpen = open;
+  els.aboutPanel.hidden = !open;
+  els.aboutToggle.textContent = open ? "Hide" : "About";
+  els.aboutToggle.setAttribute("aria-expanded", String(open));
+  document.documentElement.dataset.aboutOpen = open ? "true" : "false";
+  if (open && state.referenceOpen) setReferencePanelOpen(false);
+}
+
+function toggleAboutPanel() {
+  setAboutPanelOpen(!state.aboutOpen);
 }
 
 function syncSoundPanelState() {
@@ -4110,8 +4129,11 @@ function toggleSoundPanel() {
 }
 
 function closeSoundPanelIfOutside(event) {
-  if (!MOBILE_CONTROLS_MEDIA.matches || !state.soundOpen) return;
   const target = event.target;
+  if (state.aboutOpen && !els.aboutPanel.contains(target) && !els.aboutToggle.contains(target)) {
+    setAboutPanelOpen(false);
+  }
+  if (!MOBILE_CONTROLS_MEDIA.matches || !state.soundOpen) return;
   if (els.soundPanel.contains(target) || els.soundToggle.contains(target)) return;
   setSoundPanelOpen(false);
 }
@@ -4227,6 +4249,8 @@ function wireUi() {
   els.clearLoop.addEventListener("click", () => clearLoop());
   els.soundToggle.addEventListener("click", () => toggleSoundPanel());
   els.referenceToggle.addEventListener("click", () => toggleReferencePanel());
+  els.aboutToggle.addEventListener("click", () => toggleAboutPanel());
+  els.aboutClose.addEventListener("click", () => setAboutPanelOpen(false));
   els.referencePlay.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     toggleReferencePlayback();

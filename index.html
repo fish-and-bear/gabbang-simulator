@@ -124,6 +124,10 @@
         Tune
       </button>
 
+      <button class="about-toggle" id="aboutToggle" type="button" aria-controls="aboutPanel" aria-expanded="false">
+        About
+      </button>
+
       <section class="reference-panel" id="referencePanel" aria-label="Reference tune" hidden>
         <div class="reference-head">
           <div>
@@ -139,6 +143,48 @@
           <span id="referenceTime">0:00 / 0:00</span>
         </div>
         <audio id="referenceAudio" preload="metadata"></audio>
+      </section>
+
+      <section class="about-panel" id="aboutPanel" aria-label="About the gabbang" hidden>
+        <div class="about-head">
+          <div>
+            <p class="eyebrow">About</p>
+            <h2>Gabbang</h2>
+          </div>
+          <button id="aboutClose" type="button" aria-label="Close about panel">Close</button>
+        </div>
+        <div class="about-body">
+          <p class="about-lede">
+            A gabbang is a bamboo xylophone from the southern Philippines. It sounds bright and woody because the keys are split bamboo, not metal.
+          </p>
+          <dl class="about-facts">
+            <div>
+              <dt>Keys</dt>
+              <dd>Loose bamboo keys sit over a box frame. Longer keys make lower notes.</dd>
+            </div>
+            <div>
+              <dt>Players</dt>
+              <dd>Tausug, Sama Bajau, Yakan, and Palawan communities have their own versions, with different key counts and tunings.</dd>
+            </div>
+            <div>
+              <dt>Use</dt>
+              <dd>In Sulu, it accompanies singing and solo playing. One Sulu source calls it the most popular musical instrument there.</dd>
+            </div>
+            <div>
+              <dt>Transmission</dt>
+              <dd>Yakan master Uwang Ahadas taught gabbang and other Yakan instruments to younger players.</dd>
+            </div>
+          </dl>
+          <p class="about-note">
+            This app follows recorded Tausug gabbang samples, so it represents one sampled instrument, not a universal tuning chart.
+          </p>
+          <div class="about-sources" aria-label="About sources">
+            <a href="https://nlpdl.nlp.gov.ph/CC01/monographs/1994/NLP00VM052mcd/v1/v46.pdf" target="_blank" rel="noreferrer">Sulu source</a>
+            <a href="https://jice.um.edu.my/index.php/BRJ/article/download/10205/7241/20453" target="_blank" rel="noreferrer">Sabah study</a>
+            <a href="https://www.nationalmuseum.gov.ph/2022/02/15/birth-anniversary-of-manlilikha-ng-bayan-uwang-ahadas/" target="_blank" rel="noreferrer">Uwang Ahadas</a>
+            <a href="https://sil-philippines-languages.org/online/yka/dict/lexicon/lx01233.html" target="_blank" rel="noreferrer">Yakan</a>
+          </div>
+        </div>
       </section>
 
       <div id="keyRail" class="key-rail" aria-label="Playable note buttons"></div>
