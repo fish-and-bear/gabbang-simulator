@@ -15,6 +15,18 @@ The simulator imports PalmGenerator for the procedural shore palm crowns. When
 distributing or serving builds that include those files, keep the source and
 AGPL-3.0 notice available.
 
+## 3D plant assets
+
+The files under `public/assets/poly-pizza` are from Poly Pizza.
+
+Bamboo by Poly by Google: https://poly.pizza/m/auVD_m-ugF0
+
+License: https://creativecommons.org/licenses/by/3.0/
+
+Palm Tree by Quaternius: https://poly.pizza/m/P0tgwyXBgr
+
+License: https://creativecommons.org/publicdomain/zero/1.0/
+
 ## Audio and Katunog metadata
 
 The MP3 files and `public/data/katunog-public-audio/audio_manifest.csv` rows are

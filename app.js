@@ -6,6 +6,8 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { Water } from "three/addons/objects/Water.js";
 import { PalmGenerator } from "./third_party/PalmGenerator/src/PalmGenerator.js";
 import { LeafGeometry } from "./third_party/PalmGenerator/src/LeafGeometry.js";
 import {
@@ -18,6 +20,7 @@ import {
 const ROOT = new URL(window.GABBANG_AUDIO_ROOT || "./data/katunog-public-audio/", window.location.href)
   .toString()
   .replace(/\/?$/, "/");
+const POLY_PIZZA_ROOT = new URL("./assets/poly-pizza/", window.location.href).toString();
 const MANIFEST_URL = `${ROOT}audio_manifest.csv`;
 const GABBANG_CONTROL = "PIISD02596";
 const NOTE_KEYS = ["A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L", "P"];
@@ -63,6 +66,18 @@ const STAFF_INDEX = {
   C3: 0, D3: 1, E3: 2, F3: 3, G3: 4, A3: 5, B3: 6,
   C4: 7, D4: 8, E4: 9, F4: 10, G4: 11, A4: 12, B4: 13,
   C5: 14, D5: 15, E5: 16, F5: 17, G5: 18
+};
+const SOURCED_MODELS = {
+  bamboo: {
+    url: `${POLY_PIZZA_ROOT}bamboo-poly-by-google-cc-by-3.glb`,
+    scene: null,
+    promise: null
+  },
+  shorePalm: {
+    url: `${POLY_PIZZA_ROOT}palm-tree-quaternius-cc0.glb`,
+    scene: null,
+    promise: null
+  }
 };
 
 const state = {
@@ -550,6 +565,7 @@ const soundCurtainPulses = new Float32Array(NOTE_COUNT);
 const soundCurtainNoteX = new Float32Array(NOTE_COUNT);
 const cameraTarget = new THREE.Vector3(0, 0.35, 0);
 const desiredCamera = new THREE.Vector3();
+const gltfLoader = new GLTFLoader();
 const hotBarColor = new THREE.Color(0xffca6a);
 const idleBarColor = new THREE.Color(0xc99b50);
 const scratchColor = new THREE.Color();
@@ -572,6 +588,8 @@ let soundField;
 let soundCurtain;
 let leafBladeTexture;
 let broadLeafTexture;
+let waterNormalTexture;
+let sourcedRefreshFrame = 0;
 let lastFrameAt = performance.now();
 let elapsedTime = 0;
 
@@ -1421,14 +1439,17 @@ function makeFloorTexture(mode) {
       ctx.fillStyle = light ? `rgba(113,91,54,${alpha})` : `rgba(238,208,145,${alpha})`;
       ctx.fillRect(rng() * canvas.width, rng() * canvas.height, 1 + rng() * 2, 1 + rng() * 2);
     }
-    for (let i = 0; i < 120; i += 1) {
-      const alpha = light ? 0.035 + rng() * 0.075 : 0.045 + rng() * 0.06;
+    for (let i = 0; i < 180; i += 1) {
+      const alpha = light ? 0.026 + rng() * 0.044 : 0.032 + rng() * 0.045;
       ctx.strokeStyle = light ? `rgba(102,82,48,${alpha})` : `rgba(238,211,154,${alpha})`;
-      ctx.lineWidth = 0.8 + rng() * 0.8;
+      ctx.lineWidth = 0.45 + rng() * 0.45;
       const x = rng() * canvas.width;
       const y = rng() * canvas.height;
+      const length = 3 + rng() * 9;
+      const angle = rng() * Math.PI;
       ctx.beginPath();
-      ctx.ellipse(x, y, 4 + rng() * 10, 1.2 + rng() * 3.2, rng() * Math.PI, 0, Math.PI * 1.45);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length * 0.28);
       ctx.stroke();
     }
   } else if (mode === "studio") {
@@ -1517,13 +1538,16 @@ function makeFloorBumpTexture(mode) {
 
   if (mode === "shore") {
     ctx.globalCompositeOperation = "screen";
-    for (let i = 0; i < 150; i += 1) {
+    for (let i = 0; i < 120; i += 1) {
       ctx.strokeStyle = `rgba(255,255,255,${0.035 + rng() * 0.07})`;
-      ctx.lineWidth = 1 + rng() * 1.7;
+      ctx.lineWidth = 0.55 + rng() * 0.75;
       ctx.beginPath();
       const x = rng() * canvas.width;
       const y = rng() * canvas.height;
-      ctx.ellipse(x, y, 7 + rng() * 22, 1.3 + rng() * 4, rng() * Math.PI, 0, Math.PI * 1.5);
+      const length = 2 + rng() * 7;
+      const angle = rng() * Math.PI;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length * 0.25);
       ctx.stroke();
     }
     ctx.globalCompositeOperation = "source-over";
@@ -1775,6 +1799,147 @@ function createMotes(mode) {
   animatedEnvironment.push(motes);
 }
 
+function cloneTexture(texture) {
+  if (!texture?.isTexture) return texture;
+  const clone = texture.clone();
+  clone.needsUpdate = true;
+  return clone;
+}
+
+function cloneMaterial(material) {
+  const clone = material.clone();
+  for (const key of [
+    "map",
+    "normalMap",
+    "roughnessMap",
+    "metalnessMap",
+    "alphaMap",
+    "aoMap",
+    "emissiveMap",
+    "bumpMap"
+  ]) {
+    if (clone[key]?.isTexture) clone[key] = cloneTexture(clone[key]);
+  }
+  if (clone.map?.isTexture) {
+    clone.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+    clone.map.minFilter = THREE.LinearMipmapLinearFilter;
+    clone.map.magFilter = THREE.LinearFilter;
+  }
+  clone.side = THREE.DoubleSide;
+  clone.alphaTest = Math.max(clone.alphaTest || 0, 0.28);
+  clone.transparent = false;
+  clone.depthWrite = true;
+  clone.needsUpdate = true;
+  return clone;
+}
+
+function cloneSourcedScene(source) {
+  const clone = source.clone(true);
+  clone.traverse((item) => {
+    if (!item.isMesh) return;
+    item.geometry = item.geometry.clone();
+    item.material = Array.isArray(item.material)
+      ? item.material.map(cloneMaterial)
+      : cloneMaterial(item.material);
+    item.castShadow = true;
+    item.receiveShadow = true;
+  });
+  return clone;
+}
+
+function retintSourcedPlant(object, leafTint, trunkTint, leafMix = 0.32) {
+  object.traverse((item) => {
+    if (!item.isMesh || !item.material) return;
+    const materials = Array.isArray(item.material) ? item.material : [item.material];
+    for (const material of materials) {
+      if (!material.color) continue;
+      if (material.color.g > material.color.r && material.color.g > material.color.b) {
+        material.color.lerp(leafTint, leafMix);
+      } else {
+        material.color.lerp(trunkTint, 0.18);
+      }
+      material.roughness = Math.max(material.roughness ?? 0.7, 0.78);
+      material.needsUpdate = true;
+    }
+  });
+}
+
+function normalizeSourcedScene(object) {
+  const box = new THREE.Box3().setFromObject(object);
+  const center = box.getCenter(new THREE.Vector3());
+  const offset = new THREE.Vector3(-center.x, -box.min.y, -center.z);
+  if (object.children.length) {
+    for (const child of object.children) child.position.add(offset);
+  } else {
+    object.position.add(offset);
+  }
+  object.updateMatrixWorld(true);
+}
+
+function refreshBackdropAfterAssetLoad(id) {
+  const usesCurrentBackdrop = (id === "shorePalm" && state.backdrop === "shore")
+    || (id === "bamboo" && (state.backdrop === "grove" || state.backdrop === "rainforest"));
+  if (!usesCurrentBackdrop || sourcedRefreshFrame) return;
+  sourcedRefreshFrame = window.requestAnimationFrame(() => {
+    sourcedRefreshFrame = 0;
+    setBackdrop(state.backdrop);
+  });
+}
+
+function loadSourcedModel(id) {
+  const asset = SOURCED_MODELS[id];
+  if (!asset || asset.scene) return Promise.resolve(asset?.scene || null);
+  if (asset.promise) return asset.promise;
+  asset.promise = new Promise((resolve) => {
+    gltfLoader.load(
+      asset.url,
+      (gltf) => {
+        asset.scene = gltf.scene;
+        asset.scene.traverse((item) => {
+          if (item.isMesh) {
+            item.castShadow = true;
+            item.receiveShadow = true;
+          }
+        });
+        resolve(asset.scene);
+        refreshBackdropAfterAssetLoad(id);
+      },
+      undefined,
+      (error) => {
+        console.warn(`Could not load ${id} model`, error);
+        resolve(null);
+      }
+    );
+  });
+  return asset.promise;
+}
+
+function getSourcedModel(id) {
+  loadSourcedModel(id);
+  return SOURCED_MODELS[id]?.scene || null;
+}
+
+function disposeObjectTree(object) {
+  object.traverse((item) => {
+    if (item.geometry) item.geometry.dispose();
+    if (item.material) {
+      const disposeMaterial = (mat) => {
+        for (const value of Object.values(mat)) {
+          if (value?.isTexture) value.dispose();
+        }
+        if (mat.uniforms) {
+          for (const uniform of Object.values(mat.uniforms)) {
+            if (uniform?.value?.isTexture && uniform.value !== waterNormalTexture) uniform.value.dispose();
+          }
+        }
+        mat.dispose();
+      };
+      if (Array.isArray(item.material)) item.material.forEach(disposeMaterial);
+      else disposeMaterial(item.material);
+    }
+  });
+}
+
 function setBackdrop(mode) {
   state.backdrop = mode;
   els.backdropSelect.value = mode;
@@ -1782,19 +1947,7 @@ function setBackdrop(mode) {
   if (causticsPlane) animatedEnvironment.push(causticsPlane);
   while (environmentGroup.children.length) {
     const child = environmentGroup.children.pop();
-    child.traverse((item) => {
-      if (item.geometry) item.geometry.dispose();
-      if (item.material) {
-        const disposeMaterial = (mat) => {
-          for (const value of Object.values(mat)) {
-            if (value?.isTexture) value.dispose();
-          }
-          mat.dispose();
-        };
-        if (Array.isArray(item.material)) item.material.forEach(disposeMaterial);
-        else disposeMaterial(item.material);
-      }
-    });
+    disposeObjectTree(child);
   }
   if (backdropTexture) backdropTexture.dispose();
 
@@ -2008,23 +2161,16 @@ function drawShoreBackdrop(ctx, palette, rng) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 2048, 1024);
 
-  for (let i = 0; i < 9; i += 1) {
-    const cloud = ctx.createLinearGradient(0, 110 + i * 34, 0, 156 + i * 34);
+  for (let i = 0; i < 5; i += 1) {
+    const y = 104 + i * 36 + rng() * 18;
+    const cloud = ctx.createLinearGradient(0, y - 24, 0, y + 28);
     cloud.addColorStop(0, "rgba(255,255,255,0)");
-    cloud.addColorStop(0.45, light ? "rgba(255,255,248,0.18)" : "rgba(146,199,190,0.055)");
+    cloud.addColorStop(0.45, light ? "rgba(255,255,248,0.1)" : "rgba(146,199,190,0.04)");
     cloud.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = cloud;
-    const x = -120 + rng() * 200;
-    const y = 126 + i * 32 + rng() * 24;
-    ctx.beginPath();
-    ctx.ellipse(x + 420 + i * 150, y, 360 + rng() * 220, 28 + rng() * 18, -0.03 + rng() * 0.06, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(0, y - 28, 2048, 62);
   }
 
-  drawIsland(ctx, 520, horizon + 6, 370, 88, light ? "rgba(63,111,101,0.38)" : "rgba(10,39,42,0.72)", rng);
-  drawIsland(ctx, 1110, horizon - 10, 520, 122, light ? "rgba(50,96,95,0.32)" : "rgba(8,33,39,0.78)", rng);
-  drawIsland(ctx, 1620, horizon + 18, 330, 76, light ? "rgba(83,124,103,0.25)" : "rgba(9,36,35,0.58)", rng);
-  drawShorelineVillage(ctx, horizon + 58, light, rng);
   drawBackdropPalm(ctx, 90, 742, 0.72, 1, ink, rng);
   drawBackdropPalm(ctx, 1962, 752, 0.78, -1, ink, rng);
 
@@ -2034,6 +2180,8 @@ function drawShoreBackdrop(ctx, palette, rng) {
   water.addColorStop(1, light ? "rgba(161,153,112,0.74)" : "rgba(90,80,46,0.62)");
   ctx.fillStyle = water;
   ctx.fillRect(0, horizon, 2048, 230);
+
+  drawDistantShoreHaze(ctx, horizon, light, rng);
 
   for (let y = horizon + 16; y < 724; y += 12 + rng() * 9) {
     const alpha = light ? 0.08 + rng() * 0.1 : 0.045 + rng() * 0.065;
@@ -2050,27 +2198,27 @@ function drawShoreBackdrop(ctx, palette, rng) {
   drawBackdropBoat(ctx, 352, horizon + 92, 0.42, light, rng);
   drawBackdropBoat(ctx, 1520, horizon + 74, 0.34, light, rng);
 
-  const sand = ctx.createLinearGradient(0, 720, 0, 1024);
+  const sand = ctx.createLinearGradient(0, 780, 0, 1024);
   sand.addColorStop(0, light ? "#cfc49e" : "#5e5336");
   sand.addColorStop(0.42, light ? "#dfd3ad" : "#756640");
   sand.addColorStop(1, light ? "#efe3c2" : "#4b412b");
   ctx.fillStyle = sand;
   ctx.beginPath();
-  ctx.moveTo(0, 762);
-  for (let x = 0; x <= 2048; x += 86) {
-    ctx.lineTo(x, 742 + Math.sin(x * 0.006) * 9 + rng() * 4);
+  ctx.moveTo(0, 794);
+  for (let x = 0; x <= 2048; x += 128) {
+    ctx.lineTo(x, 790 + Math.sin(x * 0.0035) * 3 + (rng() - 0.5) * 1.2);
   }
   ctx.lineTo(2048, 1024);
   ctx.lineTo(0, 1024);
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = light ? "rgba(255,255,238,0.36)" : "rgba(148,204,191,0.2)";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = light ? "rgba(255,255,238,0.2)" : "rgba(148,204,191,0.12)";
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.moveTo(0, 748);
-  for (let x = 0; x <= 2048; x += 78) {
-    ctx.lineTo(x, 740 + Math.sin(x * 0.006) * 8);
+  ctx.moveTo(0, 786);
+  for (let x = 0; x <= 2048; x += 132) {
+    ctx.lineTo(x, 784 + Math.sin(x * 0.004) * 2);
   }
   ctx.stroke();
 
@@ -2095,36 +2243,6 @@ function drawShoreBackdrop(ctx, palette, rng) {
   }
 
   drawShoreFoliage(ctx, light, rng);
-}
-
-function drawShorelineVillage(ctx, baseY, light, rng) {
-  ctx.save();
-  ctx.globalAlpha = light ? 0.24 : 0.36;
-  const wall = light ? "rgba(80,99,80,0.38)" : "rgba(7,28,29,0.66)";
-  const roof = light ? "rgba(66,76,62,0.32)" : "rgba(5,21,22,0.72)";
-  for (let i = 0; i < 9; i += 1) {
-    const x = 1020 + i * 54 + rng() * 18;
-    const w = 30 + rng() * 20;
-    const h = 16 + rng() * 10;
-    ctx.fillStyle = wall;
-    ctx.fillRect(x, baseY - h, w, h);
-    ctx.fillStyle = roof;
-    ctx.beginPath();
-    ctx.moveTo(x - 6, baseY - h);
-    ctx.lineTo(x + w * 0.5, baseY - h - 16 - rng() * 6);
-    ctx.lineTo(x + w + 6, baseY - h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = roof;
-    ctx.lineWidth = 1;
-    for (const px of [x + 4, x + w - 4]) {
-      ctx.beginPath();
-      ctx.moveTo(px, baseY);
-      ctx.lineTo(px, baseY + 26 + rng() * 12);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
 }
 
 function drawBackdropPalm(ctx, baseX, baseY, scale, side, color, rng) {
@@ -2223,22 +2341,26 @@ function drawBackdropBoat(ctx, x, y, scale, light, rng) {
   ctx.restore();
 }
 
-function drawIsland(ctx, centerX, baseY, width, height, color, rng) {
+function drawDistantShoreHaze(ctx, horizon, light, rng) {
   ctx.save();
-  ctx.fillStyle = color;
-  ctx.filter = "blur(1.2px)";
+  ctx.filter = "blur(3px)";
+  const haze = ctx.createLinearGradient(0, horizon - 38, 0, horizon + 36);
+  haze.addColorStop(0, "rgba(255,255,255,0)");
+  haze.addColorStop(0.32, light ? "rgba(218,231,213,0.2)" : "rgba(78,145,136,0.08)");
+  haze.addColorStop(0.54, light ? "rgba(139,169,143,0.14)" : "rgba(13,54,56,0.22)");
+  haze.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, horizon - 38, 2048, 74);
+
+  ctx.filter = "blur(1.4px)";
+  ctx.strokeStyle = light ? "rgba(255,255,236,0.34)" : "rgba(152,220,207,0.16)";
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.moveTo(centerX - width / 2, baseY + 14);
-  for (let i = 0; i <= 10; i += 1) {
-    const t = i / 10;
-    const x = centerX - width / 2 + width * t;
-    const y = baseY - Math.sin(t * Math.PI) * height * (0.48 + rng() * 0.22) + Math.sin(t * 18) * 8;
-    ctx.lineTo(x, y);
+  ctx.moveTo(-20, horizon + 2);
+  for (let x = -20; x <= 2068; x += 82) {
+    ctx.lineTo(x, horizon + Math.sin(x * 0.006) * 2 + (rng() - 0.5) * 1.5);
   }
-  ctx.lineTo(centerX + width / 2, baseY + 36);
-  ctx.lineTo(centerX - width / 2, baseY + 36);
-  ctx.closePath();
-  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -2337,6 +2459,44 @@ function createAtmospherePlanes(palette, mode) {
   }
 }
 
+function makeGeneratedWaterNormals() {
+  if (waterNormalTexture) return waterNormalTexture;
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(size, size);
+  const data = image.data;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const u = x / size;
+      const v = y / size;
+      const a = u * Math.PI * 2;
+      const b = v * Math.PI * 2;
+      const dx = Math.cos(a * 2.1 + b * 0.45) * 0.42
+        + Math.cos(a * 5.8 - b * 0.7) * 0.18
+        + Math.cos((a + b) * 3.2) * 0.13;
+      const dy = Math.sin(b * 2.6 - a * 0.35) * 0.36
+        + Math.sin(b * 6.2 + a * 0.55) * 0.16
+        + Math.sin((a - b) * 3.8) * 0.12;
+      const offset = (y * size + x) * 4;
+      data[offset] = 128 - dx * 62;
+      data[offset + 1] = 128 - dy * 62;
+      data[offset + 2] = 226;
+      data[offset + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(image, 0, 0);
+  waterNormalTexture = new THREE.CanvasTexture(canvas);
+  waterNormalTexture.wrapS = THREE.RepeatWrapping;
+  waterNormalTexture.wrapT = THREE.RepeatWrapping;
+  waterNormalTexture.needsUpdate = true;
+  return waterNormalTexture;
+}
+
 function makeWaterMaterial() {
   const light = state.resolvedTheme === "light";
   return new THREE.ShaderMaterial({
@@ -2389,6 +2549,37 @@ function makeWaterMaterial() {
     depthWrite: false,
     side: THREE.DoubleSide
   });
+}
+
+function createShoreWater() {
+  const light = state.resolvedTheme === "light";
+  const water = new Water(
+    new THREE.PlaneGeometry(24, 1.24, 96, 10),
+    {
+      textureWidth: 256,
+      textureHeight: 256,
+      waterNormals: makeGeneratedWaterNormals(),
+      sunDirection: new THREE.Vector3(-0.34, 0.72, 0.44).normalize(),
+      sunColor: light ? 0xfff0c8 : 0x96d9d2,
+      waterColor: light ? 0x6aaeb8 : 0x0f3a45,
+      distortionScale: light ? 0.62 : 0.92,
+      alpha: light ? 0.46 : 0.52,
+      fog: true,
+      side: THREE.DoubleSide
+    }
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(0, -1.036, -7.05);
+  water.renderOrder = 0;
+  water.material.transparent = true;
+  water.material.depthWrite = false;
+  water.material.uniforms.size.value = light ? 0.55 : 0.72;
+  water.userData = {
+    kind: "water",
+    library: "three-water",
+    baseAlpha: light ? 0.46 : 0.52
+  };
+  return water;
 }
 
 function drawPaintedLeaf(ctx, x, y, length, width, angle, color, alpha, rng) {
@@ -2988,17 +3179,16 @@ function addFireflies(parent, mode, rng) {
 }
 
 function addWaterGlints(parent, rng) {
-  const glintTexture = makeRadialTexture("rgba(255,246,191,0.82)", "rgba(255,246,191,0)");
-  for (let i = 0; i < 34; i += 1) {
+  for (let i = 0; i < 24; i += 1) {
     const material = new THREE.MeshBasicMaterial({
-      map: glintTexture,
+      color: state.resolvedTheme === "light" ? 0xfff5cb : 0x8ed8ce,
       transparent: true,
-      opacity: (state.resolvedTheme === "light" ? 0.13 : 0.26) * (0.5 + rng()),
+      opacity: (state.resolvedTheme === "light" ? 0.09 : 0.18) * (0.45 + rng() * 0.65),
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
     });
-    const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.72 + rng() * 1.6, 0.075 + rng() * 0.08), material);
+    const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.42 + rng() * 1.35, 0.012 + rng() * 0.018), material);
     glint.rotation.x = -Math.PI / 2;
     glint.rotation.z = -0.2 + rng() * 0.4;
     glint.position.set(-9.4 + rng() * 18.8, -1.018, -5.55 + rng() * 3.35);
@@ -3033,13 +3223,6 @@ function makeFoamRibbonTexture(rng) {
     }
     ctx.stroke();
   }
-  for (let i = 0; i < 140; i += 1) {
-    const alpha = state.resolvedTheme === "light" ? 0.08 + rng() * 0.16 : 0.06 + rng() * 0.1;
-    ctx.fillStyle = `rgba(255,255,238,${alpha})`;
-    ctx.beginPath();
-    ctx.ellipse(rng() * canvas.width, 18 + rng() * 88, 1 + rng() * 3, 0.45 + rng() * 1.5, rng() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
@@ -3054,7 +3237,7 @@ function addShoreFoamBands(parent, rng) {
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
-      opacity: state.resolvedTheme === "light" ? 0.36 - i * 0.07 : 0.23 - i * 0.04,
+      opacity: state.resolvedTheme === "light" ? 0.24 - i * 0.045 : 0.17 - i * 0.035,
       depthWrite: false,
       side: THREE.DoubleSide
     });
@@ -3117,7 +3300,6 @@ function makeShoreDetailTexture(rng) {
   for (let i = 0; i < 3; i += 1) {
     drawBackdropBoat(ctx, 360 + i * 610 + rng() * 70, 288 + rng() * 36, 0.42 + rng() * 0.12, light, rng);
   }
-  drawShorelineVillage(ctx, 360, light, rng);
   drawBackdropPalm(ctx, 74, 555, 0.54, 1, ink, rng);
   drawBackdropPalm(ctx, 1988, 560, 0.58, -1, ink, rng);
   drawBackdropPalm(ctx, 1858, 610, 0.42, -1, ink, rng);
@@ -3446,6 +3628,76 @@ function addShorePalmCluster(parent, leafColor, rng) {
   animatedEnvironment.push(group);
 }
 
+function addSourcedShorePalms(parent, rng) {
+  const source = getSourcedModel("shorePalm");
+  if (!source) return false;
+
+  const group = new THREE.Group();
+  const placements = [
+    { x: -8.65, z: -6.18, scale: 0.86, yaw: 1.0, lean: 0.014 },
+    { x: 8.4, z: -6.08, scale: 0.84, yaw: -0.9, lean: -0.014 },
+    { x: 6.72, z: -5.48, scale: 0.56, yaw: -0.38, lean: -0.008 }
+  ];
+  const leafTint = new THREE.Color(state.resolvedTheme === "light" ? 0x6f9b59 : 0x2f5b41);
+  const trunkTint = new THREE.Color(state.resolvedTheme === "light" ? 0x7b5636 : 0x3a2818);
+
+  for (const placement of placements) {
+    const palm = cloneSourcedScene(source);
+    retintSourcedPlant(palm, leafTint, trunkTint, state.resolvedTheme === "light" ? 0.42 : 0.28);
+    normalizeSourcedScene(palm);
+    palm.scale.setScalar(placement.scale);
+    palm.position.set(
+      placement.x + (rng() - 0.5) * 0.22,
+      -1.06,
+      placement.z + (rng() - 0.5) * 0.14
+    );
+    palm.rotation.set(0, placement.yaw + (rng() - 0.5) * 0.16, placement.lean);
+    group.add(palm);
+  }
+
+  group.userData = {
+    kind: "sway",
+    phase: 1.4,
+    baseRotation: 0,
+    strength: 0.0028
+  };
+  parent.add(group);
+  animatedEnvironment.push(group);
+  return true;
+}
+
+function addSourcedBambooStand(parent, mode, rng) {
+  const source = getSourcedModel("bamboo");
+  if (!source) return false;
+
+  const group = new THREE.Group();
+  const count = mode === "rainforest" ? 16 : 18;
+  for (let i = 0; i < count; i += 1) {
+    const side = i % 2 ? 1 : -1;
+    const bamboo = cloneSourcedScene(source);
+    normalizeSourcedScene(bamboo);
+    const scale = mode === "rainforest" ? 1.42 + rng() * 0.78 : 1.18 + rng() * 0.82;
+    bamboo.scale.setScalar(scale);
+    bamboo.position.set(
+      side * (5.25 + rng() * 5.8),
+      -1.07,
+      -6.45 + rng() * 3.2
+    );
+    bamboo.rotation.set((rng() - 0.5) * 0.035, rng() * Math.PI * 2, (rng() - 0.5) * 0.12);
+    group.add(bamboo);
+  }
+
+  group.userData = {
+    kind: "sway",
+    phase: rng() * Math.PI * 2,
+    baseRotation: 0,
+    strength: mode === "rainforest" ? 0.0042 : 0.0032
+  };
+  parent.add(group);
+  animatedEnvironment.push(group);
+  return true;
+}
+
 function addForestRoots(parent, mode, rng) {
   const rootMaterial = new THREE.MeshStandardMaterial({
     color: state.resolvedTheme === "light" ? 0x3f2c1b : 0x120d08,
@@ -3596,31 +3848,29 @@ function addNatureGeometry(mode, palette) {
   }
 
   if (mode === "shore") {
-    const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(24, 1.05, 120, 12),
-      makeWaterMaterial()
-    );
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(0, -1.035, -7.05);
-    water.userData.kind = "water";
+    const water = createShoreWater();
     environmentGroup.add(water);
     animatedEnvironment.push(water);
     addShoreDetailScrim(environmentGroup, rng);
     addFoliageScrims(environmentGroup, mode, palette, rng);
-    addShorePalmCluster(environmentGroup, leafColor, rng);
-    addWaterGlints(environmentGroup, rng);
-    addShoreFoamBands(environmentGroup, rng);
+    if (!addSourcedShorePalms(environmentGroup, rng)) {
+      addShorePalmCluster(environmentGroup, leafColor, rng);
+    }
     addFinishedShoreBoat(environmentGroup, rng);
     addShoreArtifacts(environmentGroup, rng);
     return;
   }
 
+  const hasSourcedBamboo = addSourcedBambooStand(environmentGroup, mode, rng);
   const bambooMaterial = new THREE.MeshStandardMaterial({
     color: mode === "rainforest" ? 0x345c34 : 0x5d7a3b,
     roughness: 0.7,
     metalness: 0.02
   });
-  for (let i = 0; i < (mode === "rainforest" ? 28 : 20); i += 1) {
+  const proceduralCount = hasSourcedBamboo
+    ? (mode === "rainforest" ? 8 : 6)
+    : (mode === "rainforest" ? 28 : 20);
+  for (let i = 0; i < proceduralCount; i += 1) {
     const side = i % 2 ? 1 : -1;
     const x = side * (6.8 + rng() * 7.2);
     const z = -6.8 + rng() * 3.2;
@@ -3632,7 +3882,7 @@ function addNatureGeometry(mode, palette) {
     return;
   }
   addFoliageScrims(environmentGroup, mode, palette, rng);
-  addRainforestLeafCanopy(environmentGroup, leafColor, rng);
+  if (!hasSourcedBamboo) addRainforestLeafCanopy(environmentGroup, leafColor, rng);
   addFireflies(environmentGroup, mode, rng);
   addForestRoots(environmentGroup, mode, rng);
 }
@@ -4690,8 +4940,14 @@ function updateEnvironment(delta, elapsed) {
   for (const item of animatedEnvironment) {
     const kind = item.userData.kind;
     if (kind === "water") {
-      item.material.uniforms.uTime.value = elapsed;
-      item.material.uniforms.uEnergy.value = sceneEnergy;
+      if (item.userData.library === "three-water") {
+        item.material.uniforms.time.value = elapsed * 0.13;
+        item.material.uniforms.alpha.value = item.userData.baseAlpha + sceneEnergy * 0.018;
+        item.material.uniforms.distortionScale.value = (state.resolvedTheme === "light" ? 0.62 : 0.92) + sceneEnergy * 0.12;
+      } else {
+        item.material.uniforms.uTime.value = elapsed;
+        item.material.uniforms.uEnergy.value = sceneEnergy;
+      }
     } else if (kind === "caustics") {
       item.material.opacity = (item.userData.baseOpacity ?? (state.resolvedTheme === "light" ? 0.06 : 0.14)) * (1 + sceneEnergy * 0.55);
       item.material.map.offset.x = elapsed * (0.018 + sceneEnergy * 0.008);
