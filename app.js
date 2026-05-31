@@ -15,10 +15,10 @@ const GABBANG_CONTROL = "PIISD02596";
 const NOTE_KEYS = ["A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L", "P"];
 const KEY_TO_NOTE = new Map(NOTE_KEYS.map((key, index) => [key.toLowerCase(), index + 1]));
 const LONG_PIECE_PATTERN = /PIECE|SAMPLE|ENSEMBLE/i;
-const AUDIO_LOAD_CONCURRENCY = 10;
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 const MOBILE_CONTROLS_MEDIA = window.matchMedia("(max-width: 880px)");
+const AUDIO_LOAD_CONCURRENCY = MOBILE_CONTROLS_MEDIA.matches ? 4 : 8;
 const PRACTICE_PHRASE = [1, 2, 3, 4, 5, 4, 3, 2, 3, 4, 5, 6, 8, 6, 5, 4, 6, 8, 9, 11, 12, 11, 9, 8];
 const TUNE_REFERENCES = [
   {
@@ -92,8 +92,7 @@ const state = {
   referenceTune: "suwa-suwa",
   referenceOpen: false,
   soundOpen: false,
-  audioStatusText: "Loading",
-  pendingPlays: []
+  audioStatusText: "Loading"
 };
 
 const els = {
@@ -137,8 +136,12 @@ class AudioEngine {
     this.wet = null;
     this.convolver = null;
     this.compressor = null;
+    this.samplesByNote = new Map();
     this.buffers = new Map();
+    this.loadingSamples = new Map();
+    this.loadedSampleUrls = new Set();
     this.roundRobin = new Map();
+    this.streamingPlayers = [];
     this.volume = Number(els.volume.value);
     this.room = Number(els.room.value);
   }
@@ -174,6 +177,28 @@ class AudioEngine {
     if (resume) await this.resumeIfPossible();
   }
 
+  setSamples(samplesByNote) {
+    this.samplesByNote = samplesByNote;
+  }
+
+  hasNote(note) {
+    return this.buffers.has(note) && this.buffers.get(note).length > 0;
+  }
+
+  getFirstSample(note) {
+    return this.samplesByNote.get(note)?.[0] || state.samples.get(note)?.[0] || null;
+  }
+
+  primeFromGesture() {
+    const promise = this.init({ resume: true });
+    promise
+      .then(() => {
+        state.audioUnlocked = this.context?.state === "running";
+      })
+      .catch((error) => console.warn("Audio unlock deferred", error));
+    return promise;
+  }
+
   async resumeIfPossible() {
     if (!this.context || this.context.state !== "suspended") return;
     try {
@@ -196,9 +221,58 @@ class AudioEngine {
     return impulse;
   }
 
+  async loadSample(note, sample) {
+    await this.init({ resume: false });
+    if (!sample?.url) throw new Error(`Missing sample for note ${note}`);
+    if (this.loadedSampleUrls.has(sample.url)) return;
+    if (this.loadingSamples.has(sample.url)) return this.loadingSamples.get(sample.url);
+
+    const promise = (async () => {
+      const response = await fetch(sample.url, { cache: "force-cache" });
+      if (!response.ok) throw new Error(`Could not fetch ${sample.fileName || sample.url}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = await this.context.decodeAudioData(arrayBuffer);
+      if (!this.buffers.has(note)) this.buffers.set(note, []);
+      const buffers = this.buffers.get(note);
+      if (!buffers.some((item) => item.url === sample.url)) {
+        buffers.push({ ...sample, buffer });
+      }
+      this.loadedSampleUrls.add(sample.url);
+      state.loadedCount = this.loadedSampleUrls.size;
+    })()
+      .finally(() => {
+        this.loadingSamples.delete(sample.url);
+      });
+
+    this.loadingSamples.set(sample.url, promise);
+    return promise;
+  }
+
+  async ensureNoteLoaded(note) {
+    await this.init({ resume: false });
+    if (this.hasNote(note)) return;
+
+    const samples = this.samplesByNote.get(note) || state.samples.get(note) || [];
+    let lastError = null;
+    for (const sample of samples) {
+      try {
+        await this.loadSample(note, sample);
+        if (this.hasNote(note)) return;
+      } catch (error) {
+        lastError = error;
+        console.warn(`Could not load N${note} sample`, error);
+      }
+    }
+    throw lastError || new Error(`No playable sample for N${note}`);
+  }
+
+  countLoadedEntries(entries) {
+    return entries.reduce((count, entry) => count + (this.loadedSampleUrls.has(entry.sample.url) ? 1 : 0), 0);
+  }
+
   async loadSamples(samplesByNote) {
     await this.init({ resume: false });
-    this.buffers.clear();
+    this.setSamples(samplesByNote);
     const entries = [];
     const firstPass = [];
     const rest = [];
@@ -211,17 +285,12 @@ class AudioEngine {
       });
     }
     state.totalCount = entries.length;
-    updateLoad(0, entries.length, "Decoding samples");
+    updateLoad(this.countLoadedEntries(entries), entries.length, "Decoding samples");
 
     let nextIndex = 0;
-    let loaded = 0;
     const loadOne = async (entry) => {
-      const response = await fetch(entry.sample.url);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = await this.context.decodeAudioData(arrayBuffer);
-      if (!this.buffers.has(entry.note)) this.buffers.set(entry.note, []);
-      this.buffers.get(entry.note).push({ ...entry.sample, buffer });
-      loaded += 1;
+      await this.loadSample(entry.note, entry.sample);
+      const loaded = this.countLoadedEntries(entries);
       state.loadedCount = loaded;
       updateLoad(loaded, entries.length, "Decoding samples");
     };
@@ -246,8 +315,42 @@ class AudioEngine {
     }
   }
 
+  playStreamed(note, velocity = 1) {
+    const sample = this.getFirstSample(note);
+    if (!sample) return null;
+
+    const player = new Audio(sample.url);
+    player.preload = "auto";
+    player.playsInline = true;
+    player.volume = Math.min(1, this.volume * Math.max(0.15, Math.min(1.4, velocity * state.strikeScale)));
+
+    const cleanup = () => {
+      const index = this.streamingPlayers.indexOf(player);
+      if (index >= 0) this.streamingPlayers.splice(index, 1);
+    };
+    player.addEventListener("ended", cleanup, { once: true });
+    player.addEventListener("error", cleanup, { once: true });
+    this.streamingPlayers.push(player);
+    while (this.streamingPlayers.length > 12) {
+      const oldPlayer = this.streamingPlayers.shift();
+      oldPlayer.pause();
+    }
+
+    try {
+      return Promise.resolve(player.play())
+        .then(() => true)
+        .catch((error) => {
+          cleanup();
+          throw error;
+        });
+    } catch (error) {
+      cleanup();
+      return Promise.reject(error);
+    }
+  }
+
   async play(note, velocity = 1, when = 0, options = {}) {
-    if (!this.context || !this.buffers.has(note)) return;
+    if (!this.context || !this.hasNote(note)) return false;
     if (this.context.state === "suspended" && !when) {
       await this.resumeIfPossible();
     }
@@ -283,6 +386,7 @@ class AudioEngine {
     pan.connect(this.dry);
     pan.connect(this.convolver);
     source.start(startAt);
+    return true;
   }
 
   setVolume(value) {
@@ -448,6 +552,7 @@ async function init() {
     state.samples = grouped;
     state.notes = [...grouped.keys()].sort((a, b) => a - b);
     state.totalCount = [...grouped.values()].reduce((sum, samples) => sum + samples.length, 0);
+    audio.setSamples(grouped);
     updateLoad(0, state.totalCount, `Loading ${state.totalCount} strikes`);
     window.__GABBANG_STATE = state;
     beginAudioLoad().catch((error) => console.error(error));
@@ -3375,6 +3480,7 @@ function keyDown(event) {
   const note = KEY_TO_NOTE.get(event.key.toLowerCase());
   if (!note) return;
   event.preventDefault();
+  audio.primeFromGesture();
   triggerNote(note, 0.92);
 }
 
@@ -3386,9 +3492,17 @@ function keyUp(event) {
 }
 
 async function ensurePlayable() {
+  audio.primeFromGesture();
   await beginAudioLoad();
   await audio.resumeIfPossible();
   state.audioUnlocked = audio.context?.state === "running";
+}
+
+async function waitForSampleManifest() {
+  while (!state.samples.size) {
+    await wait(30);
+  }
+  audio.setSamples(state.samples);
 }
 
 async function beginAudioLoad() {
@@ -3400,9 +3514,7 @@ async function beginAudioLoad() {
     state.loadFailed = false;
     setAudioStatus("Loading", true);
 
-    while (!state.samples.size) {
-      await wait(40);
-    }
+    await waitForSampleManifest();
 
     try {
       updateLoad(0, state.totalCount || 1, "Preparing audio");
@@ -3432,24 +3544,33 @@ async function beginAudioLoad() {
   return audioLoadPromise;
 }
 
+async function playNoteWhenDecoded(note, velocity) {
+  try {
+    await waitForSampleManifest();
+    await audio.ensureNoteLoaded(note);
+    await audio.resumeIfPossible();
+    await audio.play(note, velocity);
+  } catch (error) {
+    console.warn(`Could not play N${note}`, error);
+  }
+}
+
 function queuePlayAfterLoad(note, velocity) {
-  state.pendingPlays.push({ note, velocity });
-  if (state.pendingPlays.length > 6) state.pendingPlays.shift();
-  audio.resumeIfPossible();
+  audio.primeFromGesture();
+  const streamed = audio.playStreamed(note, velocity);
   beginAudioLoad()
-    .then(() => {
-      const pending = state.pendingPlays.splice(0);
-      pending.forEach((event, index) => {
-        const at = audio.context.currentTime + index * 0.045;
-        audio.play(event.note, event.velocity, at);
-      });
-    })
-    .catch(() => {
-      state.pendingPlays = [];
-    });
+    .catch((error) => console.warn("Background audio load failed", error));
+
+  if (streamed) {
+    streamed.catch(() => playNoteWhenDecoded(note, velocity));
+    return;
+  }
+
+  playNoteWhenDecoded(note, velocity);
 }
 
 function triggerNote(note, velocity = 0.9, scheduledAt = 0, visualDelay = 0, scoreIndex = -1) {
+  if (!scheduledAt) audio.primeFromGesture();
   state.activeNote = note;
   const key = NOTE_KEYS[note - 1];
   els.noteName.textContent = `N${note}`;
