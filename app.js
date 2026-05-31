@@ -857,7 +857,6 @@ function createBars() {
     const length = 3.05 - i * 0.06;
     const tubeHeight = 1.28 - i * 0.035;
     const bar = new THREE.Mesh(barGeo, barMaterial.clone());
-    enhanceBarMaterial(bar.material, note);
     const idleColor = new THREE.Color().setHSL(0.09 + (i % 5) * 0.006, 0.5 + (i % 3) * 0.035, 0.42 + (i % 4) * 0.018);
     bar.material.color.copy(idleColor);
     bar.scale.set(1, 1, length / 2.95);
@@ -3211,14 +3210,15 @@ function applyInstrumentTheme() {
 
   bars.forEach((bar, index) => {
     const hue = light ? 0.095 + (index % 5) * 0.004 : 0.088 + (index % 5) * 0.006;
-    const saturation = light ? 0.5 + (index % 3) * 0.025 : 0.6 + (index % 3) * 0.035;
-    const luminance = light ? 0.57 + (index % 4) * 0.012 : 0.45 + (index % 4) * 0.018;
+    const saturation = light ? 0.44 + (index % 3) * 0.025 : 0.58 + (index % 3) * 0.035;
+    const luminance = light ? 0.48 + (index % 4) * 0.012 : 0.39 + (index % 4) * 0.018;
     bar.userData.idleColor.setHSL(hue, saturation, luminance);
-    bar.material.color.lerp(bar.userData.idleColor, 0.9);
-    bar.material.emissive.set(light ? 0x1b0d02 : 0x2c1505);
-    bar.material.roughness = light ? 0.5 : 0.42;
-    bar.material.clearcoat = light ? 0.34 : 0.52;
-    bar.material.clearcoatRoughness = light ? 0.34 : 0.26;
+    bar.material.color.lerp(bar.userData.idleColor, 0.76);
+    bar.material.emissive.set(light ? 0x130901 : 0x241104);
+    bar.material.roughness = light ? 0.54 : 0.44;
+    bar.material.clearcoat = light ? 0.28 : 0.5;
+    bar.material.clearcoatRoughness = light ? 0.4 : 0.28;
+    bar.material.bumpScale = 0.038;
   });
 
   resonators.forEach((tube, index) => {
