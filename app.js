@@ -562,6 +562,8 @@ let floorBumpTexture;
 let causticsPlane;
 let soundField;
 let soundCurtain;
+let leafBladeTexture;
+let broadLeafTexture;
 let lastFrameAt = performance.now();
 let elapsedTime = 0;
 
@@ -2119,35 +2121,66 @@ function drawShorelineVillage(ctx, baseY, light, rng) {
 
 function drawBackdropPalm(ctx, baseX, baseY, scale, side, color, rng) {
   ctx.save();
+  ctx.lineCap = "round";
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineCap = "round";
-  ctx.lineWidth = 9 * scale;
+  ctx.lineWidth = 8.5 * scale;
   const crownX = baseX + side * 48 * scale;
   const crownY = baseY - 245 * scale;
   ctx.beginPath();
   ctx.moveTo(baseX, baseY);
   ctx.bezierCurveTo(baseX + side * 18 * scale, baseY - 88 * scale, baseX + side * 66 * scale, baseY - 168 * scale, crownX, crownY);
   ctx.stroke();
-  ctx.lineWidth = 2.4 * scale;
-  for (let i = 0; i < 13; i += 1) {
-    const angle = -Math.PI * 0.93 + i * (Math.PI * 1.42 / 12) + (rng() - 0.5) * 0.12;
-    const len = (72 + rng() * 58) * scale;
+
+  for (let i = 0; i < 15; i += 1) {
+    const spread = (i - 7) / 7;
+    const angle = -Math.PI * 0.94 + i * (Math.PI * 1.42 / 14) + (rng() - 0.5) * 0.1;
+    const len = (84 + rng() * 70) * scale * (1 - Math.abs(spread) * 0.1);
     const endX = crownX + Math.cos(angle) * len * side;
-    const endY = crownY + Math.sin(angle) * len * 0.62;
+    const endY = crownY + Math.sin(angle) * len * 0.62 + Math.abs(spread) * 16 * scale;
+    const midX = (crownX + endX) * 0.5 + side * Math.sin(angle) * 18 * scale;
+    const midY = crownY - 16 * scale + rng() * 16 * scale;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.7 * scale;
     ctx.beginPath();
     ctx.moveTo(crownX, crownY);
-    ctx.quadraticCurveTo((crownX + endX) * 0.5, crownY - 18 * scale + rng() * 12 * scale, endX, endY);
+    ctx.quadraticCurveTo(midX, midY, endX, endY);
     ctx.stroke();
-    for (let j = 0; j < 5; j += 1) {
-      const t = 0.18 + j * 0.14;
-      const fx = crownX + (endX - crownX) * t;
-      const fy = crownY + (endY - crownY) * t;
+
+    for (let j = 0; j < 8; j += 1) {
+      const t = 0.16 + j * 0.09;
+      const qx = (1 - t) * (1 - t) * crownX + 2 * (1 - t) * t * midX + t * t * endX;
+      const qy = (1 - t) * (1 - t) * crownY + 2 * (1 - t) * t * midY + t * t * endY;
+      const leafLen = (18 + rng() * 18) * scale * (1 - t * 0.38);
+      const leafWidth = (3.2 + rng() * 3.4) * scale * (1 - t * 0.34);
+      const leafAngle = angle + (j % 2 ? 0.84 : -0.84) + (rng() - 0.5) * 0.18;
+      const tipX = qx + Math.cos(leafAngle) * leafLen * side;
+      const tipY = qy + Math.sin(leafAngle) * leafLen * 0.58;
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(fx + side * Math.cos(angle + 0.72) * 15 * scale, fy + Math.sin(angle + 0.72) * 9 * scale);
-      ctx.stroke();
+      ctx.moveTo(qx, qy);
+      ctx.quadraticCurveTo(
+        qx + Math.cos(leafAngle - 0.32) * leafLen * 0.5 * side,
+        qy + Math.sin(leafAngle - 0.32) * leafLen * 0.28 - leafWidth,
+        tipX,
+        tipY
+      );
+      ctx.quadraticCurveTo(
+        qx + Math.cos(leafAngle + 0.32) * leafLen * 0.5 * side,
+        qy + Math.sin(leafAngle + 0.32) * leafLen * 0.28 + leafWidth,
+        qx,
+        qy
+      );
+      ctx.closePath();
+      ctx.fill();
     }
+  }
+  ctx.fillStyle = color;
+  for (let i = 0; i < 4; i += 1) {
+    ctx.beginPath();
+    ctx.ellipse(crownX + side * (rng() - 0.5) * 18 * scale, crownY + (14 + rng() * 18) * scale, (7 + rng() * 4) * scale, (9 + rng() * 6) * scale, rng() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -2350,29 +2383,306 @@ function makeWaterMaterial() {
   });
 }
 
-function createLeafMaterial(color, opacity = 0.78) {
+function drawPaintedLeaf(ctx, x, y, length, width, angle, color, alpha, rng) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.globalAlpha = alpha;
+  const bend = (rng() - 0.5) * width * 0.7;
+  const gloss = ctx.createLinearGradient(0, 0, 0, length);
+  gloss.addColorStop(0, color.highlight);
+  gloss.addColorStop(0.42, color.mid);
+  gloss.addColorStop(1, color.shadow);
+  ctx.fillStyle = gloss;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(width * 0.86, length * 0.26, width * 0.6 + bend, length * 0.72, 0, length);
+  ctx.bezierCurveTo(-width * 0.6 + bend, length * 0.72, -width * 0.86, length * 0.26, 0, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = color.vein;
+  ctx.lineWidth = Math.max(0.55, width * 0.055);
+  ctx.globalAlpha = alpha * 0.58;
+  ctx.beginPath();
+  ctx.moveTo(0, length * 0.06);
+  ctx.bezierCurveTo(bend * 0.18, length * 0.32, bend * 0.15, length * 0.68, 0, length * 0.94);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPaintedPalmFrond(ctx, x, y, length, angle, color, alpha, rng) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color.vein;
+  ctx.lineWidth = Math.max(1.2, length * 0.018);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(length * 0.08, length * 0.25, -length * 0.08, length * 0.68, 0, length);
+  ctx.stroke();
+  const leaflets = 11 + Math.floor(rng() * 6);
+  for (let i = 1; i < leaflets; i += 1) {
+    const t = i / leaflets;
+    const side = i % 2 ? -1 : 1;
+    const baseX = Math.sin(t * Math.PI * 1.15) * length * 0.04;
+    const baseY = t * length;
+    const leafletLength = length * (0.2 + rng() * 0.13) * (1 - t * 0.35);
+    const leafletWidth = length * (0.018 + rng() * 0.012) * (1 - t * 0.28);
+    drawPaintedLeaf(ctx, baseX, baseY, leafletLength, leafletWidth, side * (0.95 + rng() * 0.52), color, alpha * (0.78 + rng() * 0.22), rng);
+  }
+  ctx.restore();
+}
+
+function makeFoliageColorSet(mode, layer) {
+  const light = state.resolvedTheme === "light";
+  if (mode === "shore") {
+    return light
+      ? { highlight: "rgba(84,132,82,0.92)", mid: "rgba(48,101,70,0.95)", shadow: "rgba(28,67,48,0.98)", vein: "rgba(23,62,44,0.46)" }
+      : { highlight: "rgba(73,132,102,0.58)", mid: "rgba(30,82,62,0.72)", shadow: "rgba(9,44,36,0.9)", vein: "rgba(110,177,139,0.22)" };
+  }
+  if (mode === "rainforest") {
+    return light
+      ? { highlight: "rgba(88,136,76,0.92)", mid: "rgba(45,94,58,0.95)", shadow: "rgba(20,60,43,0.98)", vein: "rgba(12,48,32,0.34)" }
+      : { highlight: `rgba(70,142,91,${0.44 + layer * 0.08})`, mid: `rgba(28,91,61,${0.58 + layer * 0.1})`, shadow: "rgba(5,35,25,0.92)", vein: "rgba(113,177,116,0.18)" };
+  }
+  return light
+    ? { highlight: "rgba(111,145,72,0.86)", mid: "rgba(67,110,59,0.92)", shadow: "rgba(34,74,43,0.96)", vein: "rgba(33,70,38,0.32)" }
+    : { highlight: `rgba(91,145,76,${0.4 + layer * 0.08})`, mid: `rgba(42,100,61,${0.56 + layer * 0.1})`, shadow: "rgba(10,49,34,0.88)", vein: "rgba(135,188,112,0.18)" };
+}
+
+function makeFoliageScrimTexture(mode, layer, rng) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext("2d");
+  const color = makeFoliageColorSet(mode, layer);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (mode === "shore") {
+    for (const side of [-1, 1]) {
+      const anchorX = side < 0 ? -70 + layer * 45 : canvas.width + 70 - layer * 45;
+      const anchorY = 90 + rng() * 180;
+      for (let i = 0; i < 12; i += 1) {
+        const angle = side < 0
+          ? -0.2 + i * 0.105 + rng() * 0.08
+          : Math.PI + 0.2 - i * 0.105 - rng() * 0.08;
+        drawPaintedPalmFrond(ctx, anchorX, anchorY + i * 7, 210 + rng() * 145, angle, color, 0.38 + layer * 0.08, rng);
+      }
+    }
+    for (let i = 0; i < 46; i += 1) {
+      const side = i % 2 ? -1 : 1;
+      drawPaintedLeaf(ctx, side < 0 ? rng() * 220 : canvas.width - rng() * 220, 520 + rng() * 290, 70 + rng() * 95, 7 + rng() * 8, side * (-0.65 + rng() * 0.36), color, 0.22 + rng() * 0.16, rng);
+    }
+  } else if (mode === "grove") {
+    for (let cluster = 0; cluster < 44; cluster += 1) {
+      const baseX = -110 + rng() * 2268;
+      const baseY = 40 + rng() * 560;
+      const leaves = 7 + Math.floor(rng() * 8);
+      for (let i = 0; i < leaves; i += 1) {
+        const angle = -1.4 + rng() * 2.8;
+        const length = 54 + rng() * 118 + layer * 18;
+        const width = 5 + rng() * 7;
+        drawPaintedLeaf(ctx, baseX + (rng() - 0.5) * 36, baseY + (rng() - 0.5) * 44, length, width, angle, color, 0.24 + layer * 0.08 + rng() * 0.12, rng);
+      }
+    }
+  } else {
+    for (let cluster = 0; cluster < 90; cluster += 1) {
+      const baseX = -90 + rng() * 2228;
+      const baseY = -20 + rng() * 700;
+      const leaves = 5 + Math.floor(rng() * 8);
+      for (let i = 0; i < leaves; i += 1) {
+        const angle = rng() * Math.PI * 2;
+        const length = 68 + rng() * 130 + layer * 12;
+        const width = 13 + rng() * 18;
+        drawPaintedLeaf(ctx, baseX + (rng() - 0.5) * 88, baseY + (rng() - 0.5) * 70, length, width, angle, color, 0.18 + layer * 0.07 + rng() * 0.12, rng);
+      }
+    }
+    ctx.strokeStyle = state.resolvedTheme === "light" ? "rgba(45,74,44,0.18)" : "rgba(10,36,26,0.42)";
+    ctx.lineCap = "round";
+    for (let i = 0; i < 18; i += 1) {
+      const x = rng() * canvas.width;
+      ctx.lineWidth = 2 + rng() * 4;
+      ctx.beginPath();
+      ctx.moveTo(x, -30);
+      ctx.bezierCurveTo(x - 40 + rng() * 80, 250 + rng() * 120, x - 70 + rng() * 140, 560 + rng() * 150, x - 40 + rng() * 80, 1040);
+      ctx.stroke();
+    }
+  }
+
+  const fade = ctx.createRadialGradient(1024, 420, 180, 1024, 500, 1180);
+  fade.addColorStop(0, "rgba(0,0,0,0.96)");
+  fade.addColorStop(0.62, "rgba(0,0,0,0.78)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "source-over";
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function addFoliageScrims(parent, mode, palette, rng) {
+  const layerCount = mode === "shore" ? 2 : 3;
+  for (let layer = 0; layer < layerCount; layer += 1) {
+    const texture = makeFoliageScrimTexture(mode, layer, rng);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: mode === "shore"
+        ? (state.resolvedTheme === "light" ? 0.68 : 0.5) - layer * 0.09
+        : (state.resolvedTheme === "light" ? 0.5 : 0.64) - layer * 0.08,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      alphaTest: 0.018
+    });
+    const scrim = new THREE.Mesh(new THREE.PlaneGeometry(24, 10.2), material);
+    scrim.position.set(0, mode === "shore" ? 1.35 + layer * 0.34 : 2.05 + layer * 0.28, mode === "shore" ? -6.9 + layer * 0.36 : -5.8 + layer * 0.48);
+    scrim.renderOrder = -1 + layer * 0.01;
+    scrim.userData = {
+      kind: "foliageScrim",
+      phase: rng() * Math.PI * 2,
+      baseX: scrim.position.x,
+      baseY: scrim.position.y,
+      baseOpacity: material.opacity
+    };
+    parent.add(scrim);
+    animatedEnvironment.push(scrim);
+  }
+}
+
+function getLeafTexture(kind = "blade") {
+  if (kind === "broad" && broadLeafTexture) return broadLeafTexture;
+  if (kind !== "broad" && leafBladeTexture) return leafBladeTexture;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 192;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const rng = makeRng(`leaf-texture-${kind}`);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const width = kind === "broad" ? 132 : 72;
+  const center = canvas.width / 2;
+  const top = 18;
+  const bottom = 492;
+
+  const shape = new Path2D();
+  shape.moveTo(center, top);
+  shape.bezierCurveTo(center + width * 0.62, 110, center + width * 0.48, 310, center + width * 0.08, bottom);
+  shape.quadraticCurveTo(center, bottom + 10, center - width * 0.08, bottom);
+  shape.bezierCurveTo(center - width * 0.48, 310, center - width * 0.62, 110, center, top);
+  shape.closePath();
+
+  const wash = ctx.createLinearGradient(0, top, 0, bottom);
+  wash.addColorStop(0, "rgba(230,255,206,0.92)");
+  wash.addColorStop(0.45, "rgba(178,224,132,0.94)");
+  wash.addColorStop(1, "rgba(72,128,61,0.98)");
+  ctx.fillStyle = wash;
+  ctx.fill(shape);
+
+  ctx.save();
+  ctx.clip(shape);
+  ctx.strokeStyle = "rgba(20,74,35,0.36)";
+  ctx.lineWidth = kind === "broad" ? 3.2 : 2.1;
+  ctx.beginPath();
+  ctx.moveTo(center, top + 18);
+  ctx.bezierCurveTo(center - 5, 160, center + 7, 310, center, bottom - 12);
+  ctx.stroke();
+
+  for (let y = 68; y < 470; y += kind === "broad" ? 30 : 38) {
+    const t = (y - top) / (bottom - top);
+    const span = Math.sin(t * Math.PI) * width * (kind === "broad" ? 0.46 : 0.36);
+    for (const side of [-1, 1]) {
+      ctx.strokeStyle = `rgba(18,70,30,${0.12 + rng() * 0.16})`;
+      ctx.lineWidth = 0.8 + rng() * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(center + side * 3, y);
+      ctx.quadraticCurveTo(center + side * span * 0.48, y + 12 + rng() * 14, center + side * span, y + 32 + rng() * 18);
+      ctx.stroke();
+    }
+  }
+
+  for (let i = 0; i < 120; i += 1) {
+    const y = top + rng() * (bottom - top);
+    const t = (y - top) / (bottom - top);
+    const span = Math.sin(t * Math.PI) * width * 0.46;
+    const x = center + (rng() - 0.5) * span * 2;
+    ctx.fillStyle = rng() > 0.45 ? "rgba(255,255,210,0.08)" : "rgba(11,55,24,0.08)";
+    ctx.fillRect(x, y, 1 + rng() * 4, 0.7 + rng() * 2.2);
+  }
+  ctx.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  if (kind === "broad") broadLeafTexture = texture;
+  else leafBladeTexture = texture;
+  return texture;
+}
+
+function createLeafMaterial(color, opacity = 0.78, kind = "blade") {
   return new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.74,
-    metalness: 0.01,
+    map: getLeafTexture(kind),
+    roughness: 0.86,
+    metalness: 0,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity
+    opacity,
+    alphaTest: 0.08,
+    depthWrite: opacity > 0.84
   });
 }
 
+function makeLeafBladeGeometry(length, width, segments = 10, curve = 0.08) {
+  const vertices = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments;
+    const taper = Math.sin(t * Math.PI);
+    const halfWidth = Math.max(0.002, width * taper * (0.82 + Math.sin(t * Math.PI * 2.0) * 0.06));
+    const y = t * length;
+    const z = Math.sin(t * Math.PI) * curve - t * curve * 0.2;
+    const centerX = Math.sin(t * Math.PI * 1.3) * curve * 0.16;
+    vertices.push(centerX - halfWidth, y, z, centerX + halfWidth, y, z);
+    uvs.push(0, t, 1, t);
+    if (i < segments) {
+      const base = i * 2;
+      indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function addLeafFan(group, x, y, z, size, color, rng) {
-  const leafMaterial = createLeafMaterial(color, 0.72);
-  const leafGeo = new THREE.PlaneGeometry(size * 1.25, size * 0.22, 1, 3);
-  for (let i = 0; i < 7; i += 1) {
-    const leaf = new THREE.Mesh(leafGeo, leafMaterial);
-    leaf.position.set(x, y, z);
+  const leafMaterial = createLeafMaterial(color, state.resolvedTheme === "light" ? 0.82 : 0.9, "blade");
+  const count = 15;
+  for (let i = 0; i < count; i += 1) {
+    const spread = (i - (count - 1) / 2) / ((count - 1) / 2);
+    const layer = i % 3;
+    const length = size * (0.45 + rng() * 0.34) * (1 - Math.abs(spread) * 0.08);
+    const width = size * (0.045 + rng() * 0.026);
+    const leaf = new THREE.Mesh(makeLeafBladeGeometry(length, width, 8, size * (0.035 + rng() * 0.028)), leafMaterial);
+    leaf.position.set(x + (rng() - 0.5) * size * 0.12, y + layer * size * 0.035, z + (rng() - 0.5) * size * 0.1);
+    leaf.rotation.order = "YXZ";
     leaf.rotation.set(
-      -0.4 + rng() * 0.2,
-      (i - 3) * 0.32 + (rng() - 0.5) * 0.14,
-      (i - 3) * 0.22
+      -0.92 + Math.abs(spread) * 0.22 + rng() * 0.22,
+      spread * 0.62 + (rng() - 0.5) * 0.22,
+      spread * 0.52 + (rng() - 0.5) * 0.22
     );
-    leaf.translateX(size * (0.2 + rng() * 0.26));
+    leaf.translateY(length * (0.34 + rng() * 0.18));
+    leaf.translateZ((rng() - 0.5) * size * 0.12);
     leaf.castShadow = true;
     group.add(leaf);
   }
@@ -2391,7 +2701,6 @@ function addBambooStalk(parent, x, z, height, radius, material, leafColor, rng) 
     node.position.y = y;
     group.add(node);
   }
-  addLeafFan(group, 0.02, height - 1.15, 0, 0.9 + rng() * 0.55, leafColor, rng);
   group.position.set(x, 0, z);
   group.rotation.z = (rng() - 0.5) * 0.12;
   group.userData = {
@@ -2443,20 +2752,22 @@ function addLightShafts(mode, palette) {
 }
 
 function addForegroundLeaves(parent, mode, leafColor, rng) {
-  const material = createLeafMaterial(leafColor, state.resolvedTheme === "light" ? 0.34 : 0.5);
-  const geometry = new THREE.PlaneGeometry(0.28, 1.15, 1, 4);
+  const material = createLeafMaterial(leafColor, state.resolvedTheme === "light" ? 0.42 : 0.64, "broad");
   const count = mode === "shore" ? 12 : mode === "rainforest" ? 28 : 10;
   const cluster = new THREE.Group();
   for (let i = 0; i < count; i += 1) {
     const side = i % 2 ? 1 : -1;
-    const leaf = new THREE.Mesh(geometry, material);
+    const length = 0.86 + rng() * (mode === "rainforest" ? 0.82 : 0.52);
+    const width = 0.11 + rng() * 0.08;
+    const leaf = new THREE.Mesh(makeLeafBladeGeometry(length, width, 9, 0.035 + rng() * 0.04), material);
     leaf.position.set(
       side * (5.4 + rng() * 2.0),
       (mode === "grove" ? 1.0 : 0.45) + rng() * (mode === "grove" ? 1.8 : 2.6),
       -0.2 + rng() * 3.2
     );
-    leaf.rotation.set(-0.4 + rng() * 0.8, side * (0.58 + rng() * 0.3), side * (0.28 + rng() * 0.8));
-    leaf.scale.set(0.55 + rng() * 1.15, 0.7 + rng() * 1.4, 1);
+    leaf.rotation.order = "YXZ";
+    leaf.rotation.set(-0.62 + rng() * 0.74, side * (0.38 + rng() * 0.42), side * (0.24 + rng() * 0.92));
+    leaf.translateY(length * (0.18 + rng() * 0.16));
     leaf.castShadow = mode !== "shore";
     cluster.add(leaf);
   }
@@ -2477,7 +2788,7 @@ function addCanopy(parent, mode, leafColor, rng) {
     const x = -7.5 + rng() * 15;
     const y = 2.65 + rng() * 2.3;
     const z = -4.7 + rng() * 4.3;
-    addLeafFan(canopy, x, y, z, 0.85 + rng() * 0.85, leafColor, rng);
+    addCanopyCluster(canopy, x, y, z, 0.72 + rng() * 0.92, leafColor, rng);
   }
   canopy.userData = {
     kind: "sway",
@@ -2487,6 +2798,32 @@ function addCanopy(parent, mode, leafColor, rng) {
   };
   parent.add(canopy);
   animatedEnvironment.push(canopy);
+}
+
+function addCanopyCluster(group, x, y, z, size, color, rng) {
+  const material = createLeafMaterial(color, state.resolvedTheme === "light" ? 0.62 : 0.78, "broad");
+  const count = 12;
+  for (let i = 0; i < count; i += 1) {
+    const angle = rng() * Math.PI * 2;
+    const radius = size * (0.08 + rng() * 0.42);
+    const length = size * (0.44 + rng() * 0.36);
+    const width = size * (0.075 + rng() * 0.06);
+    const leaf = new THREE.Mesh(makeLeafBladeGeometry(length, width, 7, size * (0.025 + rng() * 0.035)), material);
+    leaf.position.set(
+      x + Math.cos(angle) * radius,
+      y + (rng() - 0.5) * size * 0.34,
+      z + Math.sin(angle) * radius * 0.48
+    );
+    leaf.rotation.order = "YXZ";
+    leaf.rotation.set(
+      -0.5 + rng() * 0.72,
+      angle * 0.18 + (rng() - 0.5) * 0.8,
+      angle + (rng() - 0.5) * 0.7
+    );
+    leaf.translateY(length * (0.2 + rng() * 0.24));
+    leaf.castShadow = true;
+    group.add(leaf);
+  }
 }
 
 function addBambooCulmScreen(parent, leafColor, rng) {
@@ -2517,7 +2854,6 @@ function addBambooCulmScreen(parent, leafColor, rng) {
       node.rotation.z = culm.rotation.z;
       group.add(node);
     }
-    if (i % 4 === 0) addLeafFan(group, x, 1.65 + rng() * 1.1, -5.3 + rng() * 0.7, 0.55 + rng() * 0.38, leafColor, rng);
   }
   group.userData = {
     kind: "sway",
@@ -3101,7 +3437,6 @@ function addNatureGeometry(mode, palette) {
   const leafColor = mode === "shore"
     ? (state.resolvedTheme === "light" ? 0x426d4d : 0x173c2f)
     : (state.resolvedTheme === "light" ? 0x34683e : 0x1d5838);
-
   if (mode !== "shore") {
     for (let i = 0; i < 18; i += 1) {
       const side = i % 2 ? 1 : -1;
@@ -3134,11 +3469,10 @@ function addNatureGeometry(mode, palette) {
     environmentGroup.add(water);
     animatedEnvironment.push(water);
     addShoreDetailScrim(environmentGroup, rng);
+    addFoliageScrims(environmentGroup, mode, palette, rng);
     addWaterGlints(environmentGroup, rng);
     addShoreFoamBands(environmentGroup, rng);
-    addForegroundLeaves(environmentGroup, mode, leafColor, rng);
     addFinishedShoreBoat(environmentGroup, rng);
-    addShorePalmCluster(environmentGroup, leafColor, rng);
     addShoreArtifacts(environmentGroup, rng);
     return;
   }
@@ -3155,12 +3489,11 @@ function addNatureGeometry(mode, palette) {
     addBambooStalk(environmentGroup, x, z, 3.1 + rng() * 3.6, 0.045 + rng() * 0.025, bambooMaterial, leafColor, rng);
   }
   if (mode === "grove") {
+    addFoliageScrims(environmentGroup, mode, palette, rng);
     addBambooCulmScreen(environmentGroup, leafColor, rng);
-    addForegroundLeaves(environmentGroup, mode, leafColor, rng);
     return;
   }
-  addCanopy(environmentGroup, mode, leafColor, rng);
-  addForegroundLeaves(environmentGroup, mode, leafColor, rng);
+  addFoliageScrims(environmentGroup, mode, palette, rng);
   addFireflies(environmentGroup, mode, rng);
   addForestRoots(environmentGroup, mode, rng);
 }
@@ -4242,6 +4575,10 @@ function updateEnvironment(delta, elapsed) {
     } else if (kind === "mist") {
       item.position.x = item.userData.baseX + Math.sin(elapsed * 0.16 + item.userData.phase) * 0.42;
       item.material.opacity = item.userData.baseOpacity * (0.76 + Math.sin(elapsed * 0.23 + item.userData.phase) * 0.18);
+    } else if (kind === "foliageScrim") {
+      item.position.x = item.userData.baseX + Math.sin(elapsed * 0.055 + item.userData.phase) * 0.08;
+      item.position.y = item.userData.baseY + Math.sin(elapsed * 0.075 + item.userData.phase) * 0.025;
+      item.material.opacity = item.userData.baseOpacity * (0.92 + Math.sin(elapsed * 0.12 + item.userData.phase) * 0.06);
     } else if (kind === "reed" || kind === "sway") {
       item.rotation.z = item.userData.baseRotation + Math.sin(elapsed * 0.9 + item.userData.phase) * item.userData.strength;
     } else if (kind === "glint") {

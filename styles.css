@@ -291,6 +291,7 @@ button.active {
   top: calc(18px + var(--safe-top));
   right: 96px;
   width: min(292px, calc(100vw - 40px));
+  max-height: calc(100dvh - 36px - var(--safe-top));
   padding: 14px;
   display: grid;
   gap: 14px;
@@ -298,6 +299,8 @@ button.active {
   border-radius: 8px;
   background: var(--panel);
   backdrop-filter: blur(18px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .inspector label {
@@ -708,6 +711,7 @@ select option:checked {
     right: 14px;
     bottom: auto;
     width: auto;
+    max-height: calc(100dvh - 74px - var(--safe-top) - var(--safe-bottom));
     grid-template-columns: repeat(3, minmax(0, 1fr));
     padding: 10px;
     gap: 10px;
@@ -859,6 +863,7 @@ select option:checked {
 
   .inspector {
     top: calc(54px + var(--safe-top));
+    max-height: calc(100dvh - 66px - var(--safe-top) - var(--safe-bottom));
   }
 
   .control-strip {
