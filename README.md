@@ -36,8 +36,12 @@ Source: https://katunog.asti.dost.gov.ph
 
 Terms: https://katunog.asti.dost.gov.ph/client/terms
 
-The code is MIT licensed. The Katunog audio and metadata are not MIT licensed;
-see `NOTICE.md`.
+The original simulator code is MIT licensed. The shore palm crown generator uses
+copied source from edap/PalmGenerator under AGPL-3.0:
+
+https://github.com/edap/PalmGenerator
+
+The Katunog audio and metadata are not MIT licensed. See `NOTICE.md`.
 
 ## Controls
 

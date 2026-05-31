@@ -2,7 +2,18 @@
 
 ## Code
 
-The simulator code is licensed under the MIT License.
+The original simulator code is licensed under the MIT License.
+
+The files under `third_party/PalmGenerator` are copied from edap/PalmGenerator
+and are licensed under AGPL-3.0.
+
+Source: https://github.com/edap/PalmGenerator
+
+License copy: `third_party/PalmGenerator/LICENSE.md`
+
+The simulator imports PalmGenerator for the procedural shore palm crowns. When
+distributing or serving builds that include those files, keep the source and
+AGPL-3.0 notice available.
 
 ## Audio and Katunog metadata
 

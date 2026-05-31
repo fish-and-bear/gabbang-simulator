@@ -6,6 +6,14 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { PalmGenerator } from "./third_party/PalmGenerator/src/PalmGenerator.js";
+import { LeafGeometry } from "./third_party/PalmGenerator/src/LeafGeometry.js";
+import {
+  addPalmCrown,
+  addBambooSpray,
+  createFoliageMaterial,
+  makeBroadLeafGeometry
+} from "./proceduralFoliage.js";
 
 const ROOT = new URL(window.GABBANG_AUDIO_ROOT || "./data/katunog-public-audio/", window.location.href)
   .toString()
@@ -2701,6 +2709,19 @@ function addBambooStalk(parent, x, z, height, radius, material, leafColor, rng) 
     node.position.y = y;
     group.add(node);
   }
+  const sprayCount = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < sprayCount; i += 1) {
+    const side = i % 2 ? -1 : 1;
+    addBambooSpray(group, {
+      position: new THREE.Vector3(0, height - 1.45 - rng() * 1.1, (rng() - 0.5) * 0.08),
+      size: 0.84 + rng() * 0.52,
+      side,
+      yaw: rng() * Math.PI * 2,
+      color: leafColor,
+      rng,
+      isLight: state.resolvedTheme === "light"
+    });
+  }
   group.position.set(x, 0, z);
   group.rotation.z = (rng() - 0.5) * 0.12;
   group.userData = {
@@ -2854,6 +2875,17 @@ function addBambooCulmScreen(parent, leafColor, rng) {
       node.rotation.z = culm.rotation.z;
       group.add(node);
     }
+    if (i % 3 !== 1) {
+      addBambooSpray(group, {
+        position: new THREE.Vector3(culm.position.x, height - 1.15 - rng() * 1.15, culm.position.z + (rng() - 0.5) * 0.12),
+        size: 0.72 + rng() * 0.42,
+        side: i % 2 ? -1 : 1,
+        yaw: rng() * Math.PI * 2,
+        color: leafColor,
+        rng,
+        isLight: state.resolvedTheme === "light"
+      });
+    }
   }
   group.userData = {
     kind: "sway",
@@ -2863,6 +2895,50 @@ function addBambooCulmScreen(parent, leafColor, rng) {
   };
   parent.add(group);
   animatedEnvironment.push(group);
+}
+
+function addRainforestLeafCanopy(parent, leafColor, rng) {
+  const canopy = new THREE.Group();
+  const material = createFoliageMaterial({
+    opacity: state.resolvedTheme === "light" ? 0.94 : 0.98,
+    roughness: state.resolvedTheme === "light" ? 0.8 : 0.88
+  });
+  const count = 58;
+  for (let i = 0; i < count; i += 1) {
+    const side = i % 2 ? -1 : 1;
+    const depth = i % 5;
+    const size = 0.72 + rng() * 0.86;
+    const geometry = makeBroadLeafGeometry({
+      length: size * (0.62 + rng() * 0.34),
+      width: size * (0.095 + rng() * 0.065),
+      curvature: size * (0.05 + rng() * 0.045),
+      curl: (rng() - 0.5) * size * 0.055,
+      color: leafColor
+    });
+    const leaf = new THREE.Mesh(geometry, material);
+    leaf.position.set(
+      side * (4.8 + rng() * 3.2) + (rng() - 0.5) * 0.7,
+      1.25 + rng() * 2.85,
+      -5.65 + rng() * 4.4 + depth * 0.04
+    );
+    leaf.rotation.order = "YXZ";
+    leaf.rotation.set(
+      -0.65 + rng() * 1.18,
+      side * (0.45 + rng() * 0.65),
+      side * (0.4 + rng() * 1.15)
+    );
+    leaf.castShadow = true;
+    leaf.receiveShadow = true;
+    canopy.add(leaf);
+  }
+  canopy.userData = {
+    kind: "sway",
+    phase: rng() * Math.PI * 2,
+    baseRotation: 0,
+    strength: 0.005
+  };
+  parent.add(canopy);
+  animatedEnvironment.push(canopy);
 }
 
 function addFireflies(parent, mode, rng) {
@@ -3247,6 +3323,59 @@ function addShoreArtifacts(parent, rng) {
   }
 }
 
+function addPalmGeneratorCrown(group, crown, size, leafColor, rng) {
+  const light = state.resolvedTheme === "light";
+  const leafGeometry = new LeafGeometry({
+    length: size * (0.72 + rng() * 0.08),
+    length_stem: size * 0.16,
+    width_stem: size * 0.018,
+    leaf_width: 0.66,
+    leaf_up: size * 0.035,
+    density: 13,
+    curvature: 0.08 + rng() * 0.025,
+    curvature_border: 0.052 + rng() * 0.016,
+    leaf_inclination: 0.35 + rng() * 0.18
+  });
+  const geometry = new PalmGenerator(
+    leafGeometry,
+    new THREE.BoxGeometry(0.001, 0.001, 0.001),
+    {
+      spread: size * 0.012,
+      angle: 137.5,
+      num: 26,
+      growth: size * 0.006,
+      foliage_start_at: 40,
+      starting_angle_open: 36,
+      angle_open: 42,
+      trunk_regular: false,
+      vertex_colors: false
+    }
+  );
+  geometry.rotateX(-Math.PI / 2);
+  geometry.computeBoundingBox();
+  if (geometry.boundingBox) {
+    const center = new THREE.Vector3();
+    geometry.boundingBox.getCenter(center);
+    geometry.translate(-center.x, -geometry.boundingBox.max.y + size * 0.1, -center.z);
+  }
+  geometry.computeVertexNormals();
+
+  const crownMaterial = new THREE.MeshStandardMaterial({
+    color: leafColor,
+    roughness: light ? 0.78 : 0.86,
+    metalness: 0,
+    side: THREE.DoubleSide
+  });
+  const crownMesh = new THREE.Mesh(geometry, crownMaterial);
+  crownMesh.position.copy(crown);
+  crownMesh.rotation.y = rng() * Math.PI * 2;
+  crownMesh.rotation.z = (rng() - 0.5) * 0.08;
+  crownMesh.castShadow = true;
+  crownMesh.receiveShadow = true;
+  crownMesh.userData.source = "edap/PalmGenerator";
+  group.add(crownMesh);
+}
+
 function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ringMaterial, rng) {
   const baseY = -1.03;
   const curve = new THREE.CatmullRomCurve3([
@@ -3270,7 +3399,15 @@ function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ring
   }
 
   const crown = curve.getPoint(1);
-  addLeafFan(group, crown.x, crown.y, crown.z, 1.15 + rng() * 0.42, leafColor, rng);
+  const crownSize = 1.15 + rng() * 0.42;
+  addPalmGeneratorCrown(group, crown, crownSize * 0.68, leafColor, rng);
+  addPalmCrown(group, {
+    position: crown.clone().add(new THREE.Vector3(0, 0.03, 0)),
+    size: crownSize * 0.5,
+    color: leafColor,
+    rng,
+    isLight: state.resolvedTheme === "light"
+  });
   const coconutMaterial = new THREE.MeshStandardMaterial({
     color: state.resolvedTheme === "light" ? 0x5c4526 : 0x20180d,
     roughness: 0.86,
@@ -3297,10 +3434,10 @@ function addShorePalmCluster(parent, leafColor, rng) {
   const group = new THREE.Group();
   for (const side of [-1, 1]) {
     for (let i = 0; i < 2; i += 1) {
-      const x = side * (7.4 + i * 1.45 + rng() * 0.46);
-      const z = -5.55 + rng() * 0.72;
-      const height = 2.8 + rng() * 1.1;
-      const lean = -side * (0.28 + rng() * 0.34);
+      const x = side * (6.75 + i * 1.15 + rng() * 0.34);
+      const z = -5.85 + rng() * 0.62;
+      const height = 2.2 + rng() * 0.72;
+      const lean = -side * (0.2 + rng() * 0.28);
       addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ringMaterial, rng);
     }
   }
@@ -3470,6 +3607,7 @@ function addNatureGeometry(mode, palette) {
     animatedEnvironment.push(water);
     addShoreDetailScrim(environmentGroup, rng);
     addFoliageScrims(environmentGroup, mode, palette, rng);
+    addShorePalmCluster(environmentGroup, leafColor, rng);
     addWaterGlints(environmentGroup, rng);
     addShoreFoamBands(environmentGroup, rng);
     addFinishedShoreBoat(environmentGroup, rng);
@@ -3494,6 +3632,7 @@ function addNatureGeometry(mode, palette) {
     return;
   }
   addFoliageScrims(environmentGroup, mode, palette, rng);
+  addRainforestLeafCanopy(environmentGroup, leafColor, rng);
   addFireflies(environmentGroup, mode, rng);
   addForestRoots(environmentGroup, mode, rng);
 }
