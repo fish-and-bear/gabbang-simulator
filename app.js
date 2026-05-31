@@ -18,7 +18,10 @@ const LONG_PIECE_PATTERN = /PIECE|SAMPLE|ENSEMBLE/i;
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 const MOBILE_CONTROLS_MEDIA = window.matchMedia("(max-width: 880px)");
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const AUDIO_LOAD_CONCURRENCY = MOBILE_CONTROLS_MEDIA.matches ? 4 : 8;
+const MEDIA_POOL_SIZE = IS_IOS ? 4 : 1;
 const PRACTICE_PHRASE = [1, 2, 3, 4, 5, 4, 3, 2, 3, 4, 5, 6, 8, 6, 5, 4, 6, 8, 9, 11, 12, 11, 9, 8];
 const TUNE_REFERENCES = [
   {
@@ -141,6 +144,9 @@ class AudioEngine {
     this.loadingSamples = new Map();
     this.loadedSampleUrls = new Set();
     this.roundRobin = new Map();
+    this.mediaPools = new Map();
+    this.mediaPoolsPrepared = false;
+    this.mediaRoundRobin = new Map();
     this.streamingPlayers = [];
     this.volume = Number(els.volume.value);
     this.room = Number(els.room.value);
@@ -179,6 +185,10 @@ class AudioEngine {
 
   setSamples(samplesByNote) {
     this.samplesByNote = samplesByNote;
+    if (IS_IOS && !this.mediaPoolsPrepared) {
+      this.prepareMediaPools(samplesByNote);
+      this.mediaPoolsPrepared = true;
+    }
   }
 
   hasNote(note) {
@@ -189,7 +199,8 @@ class AudioEngine {
     return this.samplesByNote.get(note)?.[0] || state.samples.get(note)?.[0] || null;
   }
 
-  primeFromGesture() {
+  primeFromGesture(note = state.activeNote) {
+    if (IS_IOS) this.primeMediaFromGesture(note);
     const promise = this.init({ resume: true });
     promise
       .then(() => {
@@ -197,6 +208,80 @@ class AudioEngine {
       })
       .catch((error) => console.warn("Audio unlock deferred", error));
     return promise;
+  }
+
+  createMediaPlayer(sample) {
+    const player = new Audio(sample.url);
+    player.preload = "auto";
+    player.playsInline = true;
+    player.setAttribute("playsinline", "");
+    player.setAttribute("webkit-playsinline", "");
+    return player;
+  }
+
+  getMediaPool(note) {
+    const sample = this.getFirstSample(note);
+    if (!sample) return null;
+    const current = this.mediaPools.get(note);
+    if (current?.sampleUrl === sample.url) return current.players;
+
+    const players = Array.from({ length: MEDIA_POOL_SIZE }, () => this.createMediaPlayer(sample));
+    this.mediaPools.set(note, { sampleUrl: sample.url, players });
+    return players;
+  }
+
+  prepareMediaPools(samplesByNote) {
+    for (const note of samplesByNote.keys()) {
+      const players = this.getMediaPool(note);
+      if (!players) continue;
+      players.forEach((player) => {
+        try {
+          player.load();
+        } catch (error) {
+          console.warn("Media preload skipped", error);
+        }
+      });
+    }
+  }
+
+  primeMediaFromGesture(note) {
+    const players = this.getMediaPool(note);
+    if (!players?.length) return;
+    try {
+      players[0].load();
+    } catch (error) {
+      console.warn("Media unlock load skipped", error);
+    }
+  }
+
+  playMediaNote(note, velocity = 1) {
+    const players = this.getMediaPool(note);
+    if (!players?.length) return null;
+
+    const rr = this.mediaRoundRobin.get(note) || 0;
+    const player = players[rr % players.length];
+    this.mediaRoundRobin.set(note, rr + 1);
+
+    try {
+      player.pause();
+      player.currentTime = 0;
+    } catch (error) {
+      console.warn("Media restart skipped", error);
+    }
+
+    player.muted = false;
+    player.defaultMuted = false;
+    try {
+      player.volume = Math.min(1, this.volume * Math.max(0.15, Math.min(1.4, velocity * state.strikeScale)));
+    } catch (error) {
+      console.warn("Media volume follows the device controls on this browser", error);
+    }
+
+    try {
+      return Promise.resolve(player.play()).then(() => true);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   async resumeIfPossible() {
@@ -3480,7 +3565,7 @@ function keyDown(event) {
   const note = KEY_TO_NOTE.get(event.key.toLowerCase());
   if (!note) return;
   event.preventDefault();
-  audio.primeFromGesture();
+  audio.primeFromGesture(note);
   triggerNote(note, 0.92);
 }
 
@@ -3547,6 +3632,13 @@ async function beginAudioLoad() {
 async function playNoteWhenDecoded(note, velocity) {
   try {
     await waitForSampleManifest();
+    if (IS_IOS) {
+      const media = audio.playMediaNote(note, velocity);
+      if (media) {
+        await media;
+        return;
+      }
+    }
     await audio.ensureNoteLoaded(note);
     await audio.resumeIfPossible();
     await audio.play(note, velocity);
@@ -3556,8 +3648,8 @@ async function playNoteWhenDecoded(note, velocity) {
 }
 
 function queuePlayAfterLoad(note, velocity) {
-  audio.primeFromGesture();
-  const streamed = audio.playStreamed(note, velocity);
+  audio.primeFromGesture(note);
+  const streamed = IS_IOS ? audio.playMediaNote(note, velocity) : audio.playStreamed(note, velocity);
   beginAudioLoad()
     .catch((error) => console.warn("Background audio load failed", error));
 
@@ -3570,7 +3662,7 @@ function queuePlayAfterLoad(note, velocity) {
 }
 
 function triggerNote(note, velocity = 0.9, scheduledAt = 0, visualDelay = 0, scoreIndex = -1) {
-  if (!scheduledAt) audio.primeFromGesture();
+  if (!scheduledAt) audio.primeFromGesture(note);
   state.activeNote = note;
   const key = NOTE_KEYS[note - 1];
   els.noteName.textContent = `N${note}`;
@@ -3584,7 +3676,18 @@ function triggerNote(note, velocity = 0.9, scheduledAt = 0, visualDelay = 0, sco
     window.setTimeout(() => button.classList.remove("hot"), 130);
   }
 
-  if (state.ready) audio.play(note, velocity, scheduledAt);
+  if (IS_IOS && !scheduledAt) {
+    const media = audio.playMediaNote(note, velocity);
+    if (media) {
+      media.catch((error) => {
+        console.warn("iPhone media playback failed, falling back to Web Audio", error);
+        if (state.ready) audio.play(note, velocity);
+        else playNoteWhenDecoded(note, velocity);
+      });
+    } else {
+      queuePlayAfterLoad(note, velocity);
+    }
+  } else if (state.ready) audio.play(note, velocity, scheduledAt);
   else if (!scheduledAt) queuePlayAfterLoad(note, velocity);
   if (state.isRecording && !scheduledAt) {
     state.loopEvents.push({
