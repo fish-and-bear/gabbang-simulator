@@ -580,18 +580,19 @@ woodTexture.wrapS = THREE.RepeatWrapping;
 woodTexture.wrapT = THREE.RepeatWrapping;
 woodTexture.repeat.set(2.4, 0.8);
 
-const barMaterial = new THREE.MeshPhysicalMaterial({
-  color: 0xb97b36,
+const barMaterial = new THREE.MeshStandardMaterial({
+  color: 0xc48335,
   map: bambooTexture,
   bumpMap: bambooBumpTexture,
-  bumpScale: 0.038,
-  roughness: 0.46,
-  metalness: 0.02,
-  clearcoat: 0.44,
-  clearcoatRoughness: 0.32,
-  emissive: 0x201103,
+  bumpScale: 0.052,
+  roughness: 0.78,
+  metalness: 0,
+  emissive: 0x180b02,
   emissiveIntensity: 0
 });
+barMaterial.transparent = false;
+barMaterial.opacity = 1;
+barMaterial.depthWrite = true;
 
 const frameMaterial = new THREE.MeshStandardMaterial({
   color: 0x362b1b,
@@ -622,54 +623,6 @@ const shadowMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.22,
   depthWrite: false
 });
-
-function enhanceBarMaterial(material, note) {
-  const uniforms = {
-    uTime: { value: 0 },
-    uHit: { value: 0 },
-    uNote: { value: note },
-    uThemeLight: { value: 1 }
-  };
-  material.userData.shaderUniforms = uniforms;
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-        varying vec2 vGabbangUv;
-        varying vec3 vGabbangWorld;`
-      )
-      .replace(
-        "#include <uv_vertex>",
-        `#include <uv_vertex>
-        vGabbangUv = uv;
-        vec4 gabbangWorld = modelMatrix * vec4(transformed, 1.0);
-        vGabbangWorld = gabbangWorld.xyz;`
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-        uniform float uTime;
-        uniform float uHit;
-        uniform float uNote;
-        uniform float uThemeLight;
-        varying vec2 vGabbangUv;
-        varying vec3 vGabbangWorld;`
-      )
-      .replace(
-        "#include <emissivemap_fragment>",
-        `#include <emissivemap_fragment>
-        float grain = sin(vGabbangUv.y * 88.0 + sin(vGabbangUv.x * 17.0 + uNote) * 2.4);
-        float node = smoothstep(0.965, 1.0, sin((vGabbangUv.y + uNote * 0.017) * 18.849) * 0.5 + 0.5);
-        float sweep = smoothstep(0.985, 1.0, sin(vGabbangUv.x * 9.0 + vGabbangUv.y * 4.0 - uTime * 1.65 + uNote) * 0.5 + 0.5);
-        vec3 warmResonance = mix(vec3(0.9, 0.44, 0.12), vec3(1.0, 0.78, 0.36), uThemeLight);
-        totalEmissiveRadiance += warmResonance * (uHit * (0.14 + node * 0.34 + grain * 0.025) + sweep * 0.022);`
-      );
-  };
-  material.customProgramCacheKey = () => "gabbang-bar-resonance-v1";
-}
 
 document.documentElement.dataset.theme = state.resolvedTheme;
 setupScene();
@@ -857,8 +810,11 @@ function createBars() {
     const length = 3.05 - i * 0.06;
     const tubeHeight = 1.28 - i * 0.035;
     const bar = new THREE.Mesh(barGeo, barMaterial.clone());
-    const idleColor = new THREE.Color().setHSL(0.09 + (i % 5) * 0.006, 0.5 + (i % 3) * 0.035, 0.42 + (i % 4) * 0.018);
+    const idleColor = new THREE.Color().setHSL(0.086 + (i % 5) * 0.005, 0.62 + (i % 3) * 0.035, 0.38 + (i % 4) * 0.016);
     bar.material.color.copy(idleColor);
+    bar.material.transparent = false;
+    bar.material.opacity = 1;
+    bar.material.depthWrite = true;
     bar.scale.set(1, 1, length / 2.95);
     bar.position.set(x, 0, 0);
     bar.castShadow = true;
@@ -1156,27 +1112,61 @@ function createParticles() {
 
 function makeBambooTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 1024;
+  canvas.height = 256;
   const ctx = canvas.getContext("2d");
-  const gradient = ctx.createLinearGradient(0, 0, 512, 0);
-  gradient.addColorStop(0, "#b77f38");
-  gradient.addColorStop(0.28, "#d9ae62");
-  gradient.addColorStop(0.52, "#f0cd7c");
-  gradient.addColorStop(0.78, "#b9813c");
-  gradient.addColorStop(1, "#e2b96c");
+  const rng = makeRng("solid-bamboo-key-texture");
+  const gradient = ctx.createLinearGradient(0, 0, 1024, 0);
+  gradient.addColorStop(0, "#8f5521");
+  gradient.addColorStop(0.16, "#bd7a31");
+  gradient.addColorStop(0.34, "#d99d49");
+  gradient.addColorStop(0.52, "#f0c06a");
+  gradient.addColorStop(0.7, "#bf7b32");
+  gradient.addColorStop(0.88, "#9b5b23");
+  gradient.addColorStop(1, "#d59b4b");
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 512, 128);
-  for (let i = 0; i < 70; i += 1) {
-    ctx.strokeStyle = `rgba(70, 38, 12, ${0.08 + Math.random() * 0.08})`;
-    ctx.lineWidth = 1 + Math.random() * 2;
+  ctx.fillRect(0, 0, 1024, 256);
+
+  for (let x = -40; x < 1080; x += 142) {
+    const node = ctx.createLinearGradient(x - 18, 0, x + 22, 0);
+    node.addColorStop(0, "rgba(80, 40, 12, 0)");
+    node.addColorStop(0.28, "rgba(74, 35, 10, 0.18)");
+    node.addColorStop(0.54, "rgba(255, 218, 130, 0.18)");
+    node.addColorStop(0.76, "rgba(55, 25, 8, 0.2)");
+    node.addColorStop(1, "rgba(80, 40, 12, 0)");
+    ctx.fillStyle = node;
+    ctx.fillRect(x - 18, 0, 44, 256);
+  }
+
+  for (let i = 0; i < 180; i += 1) {
+    ctx.strokeStyle = `rgba(58, 29, 8, ${0.09 + rng() * 0.16})`;
+    ctx.lineWidth = 0.8 + rng() * 2.2;
     ctx.beginPath();
-    const y = Math.random() * 128;
+    const y = rng() * 256;
     ctx.moveTo(0, y);
-    for (let x = 0; x < 512; x += 30) {
-      ctx.lineTo(x, y + Math.sin(x * 0.035 + i) * (2 + Math.random() * 3));
+    for (let x = 0; x < 1024; x += 32) {
+      ctx.lineTo(x, y + Math.sin(x * 0.028 + i * 0.41) * (1.4 + rng() * 3.2));
     }
     ctx.stroke();
+  }
+
+  for (let i = 0; i < 55; i += 1) {
+    ctx.strokeStyle = `rgba(255, 220, 128, ${0.05 + rng() * 0.12})`;
+    ctx.lineWidth = 0.6 + rng() * 1.4;
+    const y = rng() * 256;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for (let x = 0; x < 1024; x += 40) {
+      ctx.lineTo(x, y + Math.sin(x * 0.021 + i) * (1.2 + rng() * 2.5));
+    }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(65, 30, 8, 0.08)";
+  for (let i = 0; i < 80; i += 1) {
+    const x = rng() * 1024;
+    const y = rng() * 256;
+    ctx.fillRect(x, y, 3 + rng() * 16, 0.8 + rng() * 1.8);
   }
   return new THREE.CanvasTexture(canvas);
 }
@@ -3209,16 +3199,18 @@ function applyInstrumentTheme() {
   tubeInnerMaterial.color.set(light ? 0x211409 : 0x100904);
 
   bars.forEach((bar, index) => {
-    const hue = light ? 0.095 + (index % 5) * 0.004 : 0.088 + (index % 5) * 0.006;
-    const saturation = light ? 0.44 + (index % 3) * 0.025 : 0.58 + (index % 3) * 0.035;
-    const luminance = light ? 0.48 + (index % 4) * 0.012 : 0.39 + (index % 4) * 0.018;
+    const hue = light ? 0.086 + (index % 5) * 0.004 : 0.082 + (index % 5) * 0.006;
+    const saturation = light ? 0.62 + (index % 3) * 0.035 : 0.66 + (index % 3) * 0.035;
+    const luminance = light ? 0.39 + (index % 4) * 0.014 : 0.32 + (index % 4) * 0.016;
     bar.userData.idleColor.setHSL(hue, saturation, luminance);
     bar.material.color.lerp(bar.userData.idleColor, 0.76);
-    bar.material.emissive.set(light ? 0x130901 : 0x241104);
-    bar.material.roughness = light ? 0.54 : 0.44;
-    bar.material.clearcoat = light ? 0.28 : 0.5;
-    bar.material.clearcoatRoughness = light ? 0.4 : 0.28;
-    bar.material.bumpScale = 0.038;
+    bar.material.emissive.set(light ? 0x100701 : 0x1c0c02);
+    bar.material.roughness = light ? 0.82 : 0.76;
+    bar.material.metalness = 0;
+    bar.material.transparent = false;
+    bar.material.opacity = 1;
+    bar.material.depthWrite = true;
+    bar.material.bumpScale = 0.052;
   });
 
   resonators.forEach((tube, index) => {
