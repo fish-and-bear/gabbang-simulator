@@ -521,7 +521,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x080908);
@@ -744,20 +744,10 @@ function setupScene() {
   createFrameDetails();
   createBars();
   createCords();
-  createSupportWeb();
   createMallets();
   createLocalContactShadows();
   createParticles();
   createFloorCaustics();
-}
-
-function makeCylinderBetween(start, end, radius, material, radialSegments = 10) {
-  const direction = new THREE.Vector3().subVectors(end, start);
-  const length = direction.length();
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, radialSegments), material);
-  mesh.position.copy(start).add(end).multiplyScalar(0.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-  return mesh;
 }
 
 function createFrameDetails() {
@@ -965,38 +955,6 @@ function createCords() {
       };
       scene.add(cord);
       suspensionCords.push(cord);
-    }
-  }
-}
-
-function createSupportWeb() {
-  const webMaterial = new THREE.MeshStandardMaterial({ color: 0x261a11, roughness: 0.9, metalness: 0.01 });
-  const bridgeMaterial = new THREE.MeshStandardMaterial({ color: 0x6a4528, roughness: 0.78, metalness: 0.02 });
-  for (let i = 0; i < 10; i += 1) {
-    const x = -4.95 + i * 1.1;
-    const offset = i % 2 ? 0.28 : -0.28;
-    const diagonal = makeCylinderBetween(
-      new THREE.Vector3(x - 0.36, -0.22, -1.04),
-      new THREE.Vector3(x + 0.36 + offset, -0.22, 1.04),
-      0.007,
-      webMaterial,
-      8
-    );
-    diagonal.castShadow = true;
-    scene.add(diagonal);
-  }
-  for (const z of [-1.18, 1.18]) {
-    for (let i = 0; i < 12; i += 1) {
-      const x = -5.35 + i * 0.97;
-      const bridge = makeCylinderBetween(
-        new THREE.Vector3(x, -0.23, z - 0.11),
-        new THREE.Vector3(x + 0.22, -0.23, z + 0.11),
-        0.009,
-        bridgeMaterial,
-        8
-      );
-      bridge.castShadow = true;
-      scene.add(bridge);
     }
   }
 }
@@ -1579,7 +1537,7 @@ function updateLocalContactShadows(mode) {
   localContactShadows.forEach((shadow, index) => {
     const resonatorShadow = index < resonators.length;
     const base = resonatorShadow ? (light ? 0.1 : 0.18) : (light ? 0.13 : 0.22);
-    shadow.material.opacity = mode === "shore" ? base * 0.72 : base;
+    shadow.material.opacity = mode === "shore" ? base * (light ? 0.16 : 0.06) : base;
   });
 }
 
@@ -1755,7 +1713,7 @@ function createSoundCurtain() {
 }
 
 function createMotes(mode) {
-  const count = mode === "studio" ? 180 : 560;
+  const count = mode === "studio" ? 180 : mode === "shore" ? 260 : 560;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
@@ -1783,10 +1741,14 @@ function createMotes(mode) {
   const motes = new THREE.Points(
     geometry,
     new THREE.PointsMaterial({
-      size: state.resolvedTheme === "light" ? 0.022 : 0.032,
+      size: mode === "shore"
+        ? (state.resolvedTheme === "light" ? 0.016 : 0.024)
+        : (state.resolvedTheme === "light" ? 0.022 : 0.032),
       vertexColors: true,
       transparent: true,
-      opacity: state.resolvedTheme === "light" ? 0.34 : 0.52,
+      opacity: mode === "shore"
+        ? (state.resolvedTheme === "light" ? 0.22 : 0.34)
+        : (state.resolvedTheme === "light" ? 0.34 : 0.52),
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
@@ -1827,6 +1789,12 @@ function cloneMaterial(material) {
   clone.alphaTest = Math.max(clone.alphaTest || 0, 0.28);
   clone.transparent = false;
   clone.depthWrite = true;
+  if (state.resolvedTheme === "dark") {
+    clone.color?.lerp(new THREE.Color(0x7aa06c), 0.18);
+    clone.emissive?.set(0x102015);
+    clone.emissiveIntensity = Math.max(clone.emissiveIntensity || 0, 0.035);
+    clone.roughness = Math.min(0.94, Math.max(clone.roughness ?? 0.82, 0.78));
+  }
   clone.needsUpdate = true;
   return clone;
 }
@@ -1941,6 +1909,7 @@ function setBackdrop(mode) {
   environmentGroup.add(backdrop);
 
   createAtmospherePlanes(palette, mode);
+  createHorizonBlend(mode);
   createMotes(mode);
   addLightShafts(mode, palette);
   if (mode === "studio") addStudioGeometry(palette);
@@ -1949,18 +1918,93 @@ function setBackdrop(mode) {
   scene.background = new THREE.Color(palette.sky);
   scene.fog = new THREE.FogExp2(palette.fog, palette.fogDensity);
   applyFloorSurface(mode);
+  applyBackdropLighting(mode);
   renderer.toneMappingExposure = state.resolvedTheme === "light" ? 0.98 : 1.08;
   bloom.strength = state.resolvedTheme === "light" ? 0.08 : 0.48;
   ssao.kernelRadius = state.resolvedTheme === "light" ? 9 : 12;
 }
 
+function applyBackdropLighting(mode) {
+  const light = state.resolvedTheme === "light";
+  if (mode === "shore") {
+    hemiLight.color.set(light ? 0xdff4ec : 0x82bfc9);
+    hemiLight.groundColor.set(light ? 0x8d6f45 : 0x12140d);
+    hemiLight.intensity = light ? 1.72 : 1.48;
+    keyLight.color.set(light ? 0xffd19a : 0xb4e2ff);
+    keyLight.position.set(light ? -4.9 : -3.2, light ? 9.6 : 7.8, light ? 6.9 : 6.1);
+    keyLight.intensity = light ? 3.35 : 5.25;
+    fillLight.color.set(light ? 0x6fb8c2 : 0x2d8f98);
+    fillLight.position.set(5.4, 2.8, -5.8);
+    fillLight.intensity = light ? 1.16 : 2.35;
+    rimLight.color.set(light ? 0xfce0a6 : 0x8bded4);
+    rimLight.intensity = light ? 1.95 : 2.75;
+    underLight.color.set(light ? 0xffc471 : 0xffb76f);
+    underLight.intensity = light ? 0.16 : 1.08;
+    rimLight.userData.baseIntensity = rimLight.intensity;
+    underLight.userData.baseIntensity = underLight.intensity;
+    return;
+  }
+
+  if (mode === "rainforest") {
+    hemiLight.color.set(light ? 0xdcefcf : 0x5fa06c);
+    hemiLight.groundColor.set(light ? 0x31401f : 0x081109);
+    hemiLight.intensity = light ? 1.42 : 1.36;
+    keyLight.color.set(light ? 0xe7f6be : 0xb3e68d);
+    keyLight.position.set(-3.6, 8.4, 5.9);
+    keyLight.intensity = light ? 2.55 : 4.85;
+    fillLight.color.set(light ? 0x6fbf92 : 0x3f8b68);
+    fillLight.intensity = light ? 1.08 : 2.08;
+    rimLight.color.set(light ? 0xd8f0a6 : 0x8bd77f);
+    rimLight.intensity = light ? 1.55 : 2.42;
+    underLight.color.set(light ? 0xffc471 : 0xffb76f);
+    underLight.intensity = light ? 0.12 : 1.14;
+    rimLight.userData.baseIntensity = rimLight.intensity;
+    underLight.userData.baseIntensity = underLight.intensity;
+    return;
+  }
+
+  if (mode === "grove") {
+    hemiLight.color.set(light ? 0xe5f1d0 : 0x75a777);
+    hemiLight.groundColor.set(light ? 0x4d5330 : 0x0b1209);
+    hemiLight.intensity = light ? 1.5 : 1.34;
+    keyLight.color.set(light ? 0xf8e7ad : 0xb6d98d);
+    keyLight.position.set(-4.2, 8.8, 6.3);
+    keyLight.intensity = light ? 2.9 : 4.72;
+    fillLight.color.set(light ? 0x7bad88 : 0x4b9272);
+    fillLight.intensity = light ? 1.0 : 1.96;
+    rimLight.color.set(light ? 0xe5f3bb : 0x9ed58c);
+    rimLight.intensity = light ? 1.62 : 2.38;
+    underLight.color.set(light ? 0xffc471 : 0xffb76f);
+    underLight.intensity = light ? 0.12 : 1.12;
+    rimLight.userData.baseIntensity = rimLight.intensity;
+    underLight.userData.baseIntensity = underLight.intensity;
+    return;
+  }
+
+  hemiLight.color.set(light ? 0xf2e6d0 : 0xd8ecd5);
+  hemiLight.groundColor.set(light ? 0x6a4c2d : 0x15100b);
+  hemiLight.intensity = light ? 1.55 : 1.2;
+  keyLight.color.set(0xffd49a);
+  keyLight.position.set(-4.6, 9.4, 6.8);
+  keyLight.intensity = light ? 3.15 : 4.8;
+  fillLight.color.set(0x7bb4c5);
+  fillLight.position.set(5, 3, -5);
+  fillLight.intensity = light ? 1.1 : 1.8;
+  rimLight.color.set(0x9bd2c0);
+  rimLight.intensity = light ? 1.7 : 2.5;
+  underLight.color.set(0xffc471);
+  underLight.intensity = light ? 0.12 : 1.15;
+  rimLight.userData.baseIntensity = rimLight.intensity;
+  underLight.userData.baseIntensity = underLight.intensity;
+}
+
 function configureCaustics(mode) {
   if (!causticsPlane) return;
-  causticsPlane.visible = mode !== "studio" && mode !== "shore";
+  causticsPlane.visible = mode !== "studio";
   causticsPlane.position.z = mode === "shore" ? -4.25 : -2.1;
   causticsPlane.scale.set(mode === "shore" ? 1.18 : 0.85, mode === "shore" ? 0.38 : 0.62, 1);
   causticsPlane.userData.baseOpacity = mode === "shore"
-    ? (state.resolvedTheme === "light" ? 0.035 : 0.08)
+    ? (state.resolvedTheme === "light" ? 0.028 : 0.055)
     : (state.resolvedTheme === "light" ? 0.045 : 0.11);
 }
 
@@ -1971,14 +2015,14 @@ function getScenePalette() {
       ? { sky: 0xf2ead8, fog: 0xf2ead8, floor: 0xd8cfb9, high: "#f5eddc", far: "#e7ddc6", mid: "#cabd9d", near: "#9b8153", ink: "#665033", haze: "rgba(255,250,238,0.42)", fogDensity: 0.025 }
       : { sky: 0x080908, fog: 0x080908, floor: 0x12140f, high: "#11130d", far: "#15160f", mid: "#1d2117", near: "#3a2d1d", ink: "#4c3a22", haze: "rgba(255,220,150,0.08)", fogDensity: 0.035 },
     grove: light
-      ? { sky: 0xe4ead7, fog: 0xdfe8d5, floor: 0xb7a879, high: "#edf1df", far: "#cfdcc1", mid: "#7f9d68", near: "#2d6048", ink: "#1f4635", haze: "rgba(236,244,218,0.36)", fogDensity: 0.018 }
-      : { sky: 0x07100b, fog: 0x07100b, floor: 0x10170d, high: "#0a1711", far: "#10251b", mid: "#1e3d2d", near: "#314f2b", ink: "#0a1811", haze: "rgba(145,190,128,0.10)", fogDensity: 0.032 },
+      ? { sky: 0xe7efda, fog: 0xdfe9d4, floor: 0xb7a879, high: "#f0f4df", far: "#d2dfc5", mid: "#86a46f", near: "#315f48", ink: "#1f4635", haze: "rgba(236,244,218,0.36)", fogDensity: 0.018 }
+      : { sky: 0x08120d, fog: 0x08120d, floor: 0x10170d, high: "#0b1811", far: "#10291e", mid: "#23513b", near: "#385d2e", ink: "#0a1811", haze: "rgba(145,190,128,0.13)", fogDensity: 0.03 },
     shore: light
-      ? { sky: 0xe8efe8, fog: 0xe4eee9, floor: 0xcbbe94, high: "#f4efe0", far: "#d7e6df", mid: "#78abb0", near: "#c7b47f", ink: "#416565", haze: "rgba(255,255,242,0.5)", fogDensity: 0.017 }
-      : { sky: 0x0c1c21, fog: 0x0c1c21, floor: 0x151914, high: "#10272e", far: "#17444d", mid: "#2c6468", near: "#817142", ink: "#061519", haze: "rgba(151,214,202,0.13)", fogDensity: 0.028 },
+      ? { sky: 0xeaf2ec, fog: 0xe3efeb, floor: 0xcbbe94, high: "#fff0cc", far: "#dcebe6", mid: "#72b1b6", near: "#c8b27c", ink: "#3b6660", haze: "rgba(255,255,242,0.48)", fogDensity: 0.016 }
+      : { sky: 0x0b2028, fog: 0x0b2028, floor: 0x151914, high: "#102b35", far: "#14505d", mid: "#2b7272", near: "#927d44", ink: "#06252a", haze: "rgba(151,214,202,0.18)", fogDensity: 0.025 },
     rainforest: light
-      ? { sky: 0xe0ead7, fog: 0xd5e4ca, floor: 0x9c8f61, high: "#e6efda", far: "#c9dec0", mid: "#598456", near: "#174f3f", ink: "#13392f", haze: "rgba(224,240,205,0.32)", fogDensity: 0.021 }
-      : { sky: 0x06100b, fog: 0x06100b, floor: 0x0e160d, high: "#07140d", far: "#0a1c12", mid: "#183425", near: "#204d34", ink: "#06120d", haze: "rgba(98,148,95,0.10)", fogDensity: 0.038 }
+      ? { sky: 0xe1ecd8, fog: 0xd5e4ca, floor: 0x9c8f61, high: "#ecf3dc", far: "#c9dec0", mid: "#628f59", near: "#1c5a45", ink: "#13392f", haze: "rgba(224,240,205,0.32)", fogDensity: 0.021 }
+      : { sky: 0x06120c, fog: 0x06120c, floor: 0x0e160d, high: "#07160e", far: "#0c2115", mid: "#1b412e", near: "#26613d", ink: "#06120d", haze: "rgba(98,148,95,0.14)", fogDensity: 0.035 }
   };
   return palettes[state.backdrop] || palettes.grove;
 }
@@ -2133,13 +2177,15 @@ function drawLeafCluster(ctx, x, y, radius, color, alpha, rng) {
 function drawShoreBackdrop(ctx, palette, rng) {
   const light = state.resolvedTheme === "light";
   const horizon = 565;
-  const ink = light ? "rgba(48,83,76,0.32)" : "rgba(5,28,30,0.72)";
+  const ink = light ? "rgba(48,83,76,0.26)" : "rgba(8,46,48,0.38)";
   const glow = ctx.createRadialGradient(1320, light ? 320 : 390, 45, 1320, light ? 320 : 390, 620);
   glow.addColorStop(0, light ? "rgba(255,236,184,0.82)" : "rgba(232,180,95,0.35)");
   glow.addColorStop(0.42, light ? "rgba(255,244,206,0.34)" : "rgba(107,177,175,0.15)");
   glow.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 2048, 1024);
+  if (!light) drawShoreStars(ctx, rng);
+  drawShoreCelestialBody(ctx, light);
 
   for (let i = 0; i < 5; i += 1) {
     const y = 104 + i * 36 + rng() * 18;
@@ -2153,6 +2199,7 @@ function drawShoreBackdrop(ctx, palette, rng) {
 
   drawBackdropPalm(ctx, 90, 742, 0.72, 1, ink, rng);
   drawBackdropPalm(ctx, 1962, 752, 0.78, -1, ink, rng);
+  drawDistantIslands(ctx, horizon, light, rng);
 
   const water = ctx.createLinearGradient(0, horizon, 0, 1024);
   water.addColorStop(0, light ? "rgba(116,174,181,0.84)" : "rgba(29,93,101,0.88)");
@@ -2160,6 +2207,7 @@ function drawShoreBackdrop(ctx, palette, rng) {
   water.addColorStop(1, light ? "rgba(161,153,112,0.74)" : "rgba(90,80,46,0.62)");
   ctx.fillStyle = water;
   ctx.fillRect(0, horizon, 2048, 230);
+  drawShoreSunTrack(ctx, horizon, light, rng);
 
   drawDistantShoreHaze(ctx, horizon, light, rng);
 
@@ -2175,8 +2223,7 @@ function drawShoreBackdrop(ctx, palette, rng) {
     }
     ctx.stroke();
   }
-  drawBackdropBoat(ctx, 352, horizon + 92, 0.42, light, rng);
-  drawBackdropBoat(ctx, 1520, horizon + 74, 0.34, light, rng);
+  drawBackdropBoat(ctx, 1504, horizon + 72, 0.3, light, rng);
 
   const sand = ctx.createLinearGradient(0, 780, 0, 1024);
   sand.addColorStop(0, light ? "#cfc49e" : "#5e5336");
@@ -2223,6 +2270,92 @@ function drawShoreBackdrop(ctx, palette, rng) {
   }
 
   drawShoreFoliage(ctx, light, rng);
+}
+
+function drawShoreCelestialBody(ctx, light) {
+  ctx.save();
+  const x = 1320;
+  const y = light ? 318 : 342;
+  const radius = light ? 46 : 34;
+  const aura = ctx.createRadialGradient(x, y, radius * 0.4, x, y, radius * 5.8);
+  aura.addColorStop(0, light ? "rgba(255,237,183,0.58)" : "rgba(162,223,230,0.22)");
+  aura.addColorStop(0.38, light ? "rgba(255,226,157,0.16)" : "rgba(118,191,202,0.08)");
+  aura.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = aura;
+  ctx.fillRect(x - radius * 6, y - radius * 6, radius * 12, radius * 12);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = light ? "rgba(255,238,188,0.92)" : "rgba(210,243,246,0.88)";
+  ctx.fill();
+  if (!light) {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x + 13, y - 9, radius * 0.92, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.62)";
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawShoreStars(ctx, rng) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 84; i += 1) {
+    const x = rng() * 2048;
+    const y = 34 + rng() * 330;
+    const alpha = 0.08 + rng() * 0.28;
+    const radius = 0.55 + rng() * 1.15;
+    ctx.fillStyle = `rgba(198,235,230,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDistantIslands(ctx, horizon, light, rng) {
+  ctx.save();
+  ctx.filter = "blur(1.6px)";
+  const islandColor = light ? "rgba(57,101,91,0.13)" : "rgba(5,35,40,0.42)";
+  const ridges = [
+    { x: 48, y: horizon - 18, w: 520, h: 34 },
+    { x: 780, y: horizon - 14, w: 410, h: 25 },
+    { x: 1610, y: horizon - 20, w: 380, h: 31 }
+  ];
+  ctx.fillStyle = islandColor;
+  for (const ridge of ridges) {
+    ctx.beginPath();
+    ctx.moveTo(ridge.x, horizon + 5);
+    for (let x = ridge.x; x <= ridge.x + ridge.w; x += 48) {
+      const t = (x - ridge.x) / ridge.w;
+      const arch = Math.sin(t * Math.PI) * ridge.h;
+      ctx.lineTo(x, ridge.y - arch * (0.45 + rng() * 0.18) + Math.sin(x * 0.013) * 3);
+    }
+    ctx.lineTo(ridge.x + ridge.w, horizon + 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawShoreSunTrack(ctx, horizon, light, rng) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 36; i += 1) {
+    const y = horizon + 18 + i * 5.2;
+    const width = 380 * (1 - i / 48) + rng() * 44;
+    const x = 1320 + Math.sin(i * 0.9) * 22 + (rng() - 0.5) * 18;
+    const alpha = (light ? 0.12 : 0.07) * (1 - i / 42);
+    ctx.strokeStyle = light ? `rgba(255,239,184,${alpha})` : `rgba(154,226,223,${alpha})`;
+    ctx.lineWidth = 0.8 + rng() * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x - width * 0.5, y);
+    for (let px = x - width * 0.5; px <= x + width * 0.5; px += 38) {
+      ctx.lineTo(px, y + Math.sin(px * 0.021 + i) * (0.8 + rng() * 1.4));
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawBackdropPalm(ctx, baseX, baseY, scale, side, color, rng) {
@@ -2293,31 +2426,58 @@ function drawBackdropPalm(ctx, baseX, baseY, scale, side, color, rng) {
 
 function drawBackdropBoat(ctx, x, y, scale, light, rng) {
   ctx.save();
-  const hull = light ? "rgba(71,45,28,0.42)" : "rgba(15,12,9,0.72)";
-  const sail = light ? "rgba(255,245,203,0.56)" : "rgba(224,174,93,0.34)";
-  ctx.fillStyle = hull;
-  ctx.beginPath();
-  ctx.moveTo(x - 84 * scale, y);
-  ctx.quadraticCurveTo(x - 18 * scale, y + 24 * scale, x + 84 * scale, y);
-  ctx.lineTo(x + 62 * scale, y + 18 * scale);
-  ctx.quadraticCurveTo(x, y + 34 * scale, x - 62 * scale, y + 18 * scale);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = hull;
-  ctx.lineWidth = 2 * scale;
-  for (const offset of [-52, 52]) {
+  ctx.globalAlpha = light ? 0.86 : 0.68;
+  const hull = light ? "rgba(70,45,28,0.44)" : "rgba(9,17,18,0.68)";
+  const trim = light ? "rgba(238,197,112,0.42)" : "rgba(138,205,197,0.2)";
+  const sail = light ? "rgba(255,245,203,0.48)" : "rgba(190,223,219,0.28)";
+
+  ctx.strokeStyle = trim;
+  ctx.lineWidth = 1.2 * scale;
+  for (const z of [-1, 1]) {
     ctx.beginPath();
-    ctx.moveTo(x + offset * scale, y + 10 * scale);
-    ctx.lineTo(x + offset * scale, y + 48 * scale);
+    ctx.moveTo(x - 106 * scale, y + (18 + z * 2) * scale);
+    ctx.quadraticCurveTo(x, y + (33 + z * 3) * scale, x + 106 * scale, y + (18 + z * 2) * scale);
     ctx.stroke();
   }
+
+  ctx.fillStyle = hull;
+  ctx.beginPath();
+  ctx.moveTo(x - 92 * scale, y);
+  ctx.quadraticCurveTo(x - 24 * scale, y + 27 * scale, x + 92 * scale, y);
+  ctx.lineTo(x + 68 * scale, y + 16 * scale);
+  ctx.quadraticCurveTo(x, y + 30 * scale, x - 68 * scale, y + 16 * scale);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = trim;
+  ctx.lineWidth = 1.6 * scale;
+  for (const offset of [-52, 52]) {
+    ctx.beginPath();
+    ctx.moveTo(x + offset * scale, y + 12 * scale);
+    ctx.lineTo(x + offset * scale, y + 44 * scale);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = hull;
+  ctx.lineWidth = 2.2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x + 6 * scale, y - 72 * scale);
+  ctx.lineTo(x + 6 * scale, y + 3 * scale);
+  ctx.stroke();
+
   ctx.fillStyle = sail;
   ctx.beginPath();
   ctx.moveTo(x + 6 * scale, y - 70 * scale);
   ctx.lineTo(x + 6 * scale, y - 4 * scale);
-  ctx.lineTo(x + 72 * scale, y - 32 * scale);
+  ctx.quadraticCurveTo(x + 58 * scale, y - 40 * scale, x + 76 * scale, y - 30 * scale);
   ctx.closePath();
   ctx.fill();
+
+  ctx.strokeStyle = light ? "rgba(255,250,220,0.14)" : "rgba(151,217,209,0.08)";
+  ctx.lineWidth = 1 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x - 90 * scale, y + 35 * scale);
+  ctx.lineTo(x + 94 * scale, y + 35 * scale);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -2383,7 +2543,7 @@ function drawVignette(ctx) {
   const vignette = ctx.createRadialGradient(1024, 450, 220, 1024, 520, 1200);
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(0.7, "rgba(0,0,0,0.08)");
-  vignette.addColorStop(1, state.resolvedTheme === "light" ? "rgba(80,61,24,0.16)" : "rgba(0,0,0,0.48)");
+  vignette.addColorStop(1, state.resolvedTheme === "light" ? "rgba(80,61,24,0.16)" : "rgba(0,0,0,0.34)");
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, 2048, 1024);
 }
@@ -2408,8 +2568,74 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function makeHorizonBlendTexture(mode) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  const light = state.resolvedTheme === "light";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const color = mode === "shore"
+    ? (light ? "255,246,214" : "102,176,172")
+    : mode === "studio"
+      ? (light ? "239,224,190" : "88,63,34")
+      : (light ? "224,239,202" : "88,147,103");
+  const alpha = mode === "shore"
+    ? (light ? 0.22 : 0.18)
+    : mode === "studio"
+      ? (light ? 0.18 : 0.14)
+      : (light ? 0.14 : 0.18);
+
+  const vertical = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  vertical.addColorStop(0, "rgba(255,255,255,0)");
+  vertical.addColorStop(0.3, `rgba(${color},${alpha * 0.72})`);
+  vertical.addColorStop(0.52, `rgba(${color},${alpha})`);
+  vertical.addColorStop(0.75, `rgba(${color},${alpha * 0.46})`);
+  vertical.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = vertical;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.globalCompositeOperation = "destination-in";
+  const sideFade = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  sideFade.addColorStop(0, "rgba(0,0,0,0.12)");
+  sideFade.addColorStop(0.12, "rgba(0,0,0,0.82)");
+  sideFade.addColorStop(0.88, "rgba(0,0,0,0.82)");
+  sideFade.addColorStop(1, "rgba(0,0,0,0.12)");
+  ctx.fillStyle = sideFade;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "source-over";
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
+function createHorizonBlend(mode) {
+  if (mode === "studio") return;
+  const material = new THREE.MeshBasicMaterial({
+    map: makeHorizonBlendTexture(mode),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const blend = new THREE.Mesh(new THREE.PlaneGeometry(24, mode === "shore" ? 2.7 : 3.3), material);
+  blend.position.set(0, mode === "shore" ? 0.34 : 0.42, mode === "shore" ? -5.72 : -4.78);
+  blend.renderOrder = -0.8;
+  blend.userData = {
+    kind: "mist",
+    phase: mode === "shore" ? 0.7 : 1.3,
+    baseX: blend.position.x,
+    baseOpacity: material.opacity
+  };
+  environmentGroup.add(blend);
+  animatedEnvironment.push(blend);
+}
+
 function createAtmospherePlanes(palette, mode) {
-  if (mode === "shore") return;
   const texture = mode === "shore" ? makeShoreHazeTexture() : makeMistTexture();
   const light = state.resolvedTheme === "light";
   for (let i = 0; i < 3; i += 1) {
@@ -2423,7 +2649,8 @@ function createAtmospherePlanes(palette, mode) {
     });
     const mist = new THREE.Mesh(new THREE.PlaneGeometry(18 + i * 5, 2.1 + i * 0.45), material);
     if (mode === "shore") {
-      mist.position.set((i - 1) * 2.9, 2 + i * 0.34, -6.4 - i * 0.42);
+      mist.position.set((i - 1) * 3.1, 1.28 + i * 0.22, -6.65 - i * 0.34);
+      mist.scale.x = 1.12 + i * 0.18;
     } else {
       mist.position.set((i - 1) * 2.5, 1.1 + i * 0.55, -4.9 - i * 0.9);
     }
@@ -2482,10 +2709,10 @@ function makeWaterMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
-      uColorA: { value: new THREE.Color(light ? 0x80b7bd : 0x123b45) },
-      uColorB: { value: new THREE.Color(light ? 0xe8dcc0 : 0x274f54) },
+      uColorA: { value: new THREE.Color(light ? 0x79b9bf : 0x164a56) },
+      uColorB: { value: new THREE.Color(light ? 0xe6d8ad : 0x2d605c) },
       uFoam: { value: new THREE.Color(light ? 0xf8f4de : 0x93d6ce) },
-      uOpacity: { value: light ? 0.28 : 0.36 },
+      uOpacity: { value: light ? 0.2 : 0.3 },
       uEnergy: { value: 0 }
     },
     vertexShader: `
@@ -2519,10 +2746,14 @@ function makeWaterMaterial() {
         float lineB = sin(vUv.y * 44.0 - vUv.x * 3.0 + uTime * 0.62);
         float foam = smoothstep(0.93, 0.985, lineA * 0.5 + 0.5) * 0.13;
         foam += smoothstep(0.965, 0.995, lineB * 0.5 + 0.5) * 0.06;
-        foam *= smoothstep(0.04, 0.32, vUv.y) * (1.0 + uEnergy * 1.5);
-        vec3 color = mix(uColorA, uColorB, vUv.y + vWave * 2.0);
+        float edge = 1.0 - smoothstep(0.06, 0.28, vUv.y);
+        foam += edge * (0.12 + sin(vUv.x * 38.0 + uTime * 0.9) * 0.025);
+        foam *= (0.68 + smoothstep(0.04, 0.42, vUv.y)) * (1.0 + uEnergy * 1.2);
+        float alphaFade = smoothstep(0.01, 0.12, vUv.y) * (1.0 - smoothstep(0.94, 1.0, vUv.y) * 0.22);
+        vec3 color = mix(uColorB, uColorA, smoothstep(0.05, 0.96, vUv.y) + vWave * 1.8);
+        color += uFoam * foam * 0.24;
         color = mix(color, uFoam, foam);
-        gl_FragColor = vec4(color, uOpacity + uEnergy * 0.035);
+        gl_FragColor = vec4(color, (uOpacity + foam * 0.08 + uEnergy * 0.025) * alphaFade);
       }
     `,
     transparent: true,
@@ -2560,6 +2791,21 @@ function createShoreWater() {
     baseAlpha: light ? 0.46 : 0.52
   };
   return water;
+}
+
+function createShallowLagoon() {
+  const lagoon = new THREE.Mesh(
+    new THREE.PlaneGeometry(22, 2.65, 128, 18),
+    makeWaterMaterial()
+  );
+  lagoon.rotation.x = -Math.PI / 2;
+  lagoon.position.set(0, -1.031, -5.18);
+  lagoon.renderOrder = 0.5;
+  lagoon.userData = {
+    kind: "water",
+    library: "shader"
+  };
+  return lagoon;
 }
 
 function drawPaintedLeaf(ctx, x, y, length, width, angle, color, alpha, rng) {
@@ -2619,7 +2865,7 @@ function makeFoliageColorSet(mode, layer) {
   if (mode === "shore") {
     return light
       ? { highlight: "rgba(84,132,82,0.92)", mid: "rgba(48,101,70,0.95)", shadow: "rgba(28,67,48,0.98)", vein: "rgba(23,62,44,0.46)" }
-      : { highlight: "rgba(38,88,68,0.44)", mid: "rgba(18,61,47,0.64)", shadow: "rgba(4,31,28,0.9)", vein: "rgba(112,170,140,0.13)" };
+      : { highlight: "rgba(58,118,91,0.34)", mid: "rgba(24,82,66,0.46)", shadow: "rgba(8,43,39,0.62)", vein: "rgba(135,203,174,0.16)" };
   }
   if (mode === "rainforest") {
     return light
@@ -2712,7 +2958,7 @@ function addFoliageScrims(parent, mode, palette, rng) {
       map: texture,
       transparent: true,
       opacity: mode === "shore"
-        ? (state.resolvedTheme === "light" ? 0.68 : 0.38) - layer * 0.08
+        ? (state.resolvedTheme === "light" ? 0.56 : 0.24) - layer * 0.06
         : (state.resolvedTheme === "light" ? 0.5 : 0.64) - layer * 0.08,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -2915,9 +3161,13 @@ function addLightShafts(mode, palette) {
     : mode === "studio"
       ? (light ? 0xffdf9a : 0xffbd62)
       : (light ? 0xf3ffd6 : 0x98d483);
-  const count = mode === "studio" ? 3 : mode === "rainforest" ? 7 : 3;
+  const count = mode === "shore" ? 4 : mode === "studio" ? 3 : mode === "rainforest" ? 7 : 3;
   for (let i = 0; i < count; i += 1) {
-    const baseOpacity = mode === "grove" ? (light ? 0.035 : 0.06) : (light ? 0.08 : 0.13);
+    const baseOpacity = mode === "shore"
+      ? (light ? 0.045 : 0.07)
+      : mode === "grove"
+        ? (light ? 0.035 : 0.06)
+        : (light ? 0.08 : 0.13);
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       color,
@@ -2927,9 +3177,14 @@ function addLightShafts(mode, palette) {
       depthWrite: false,
       side: THREE.DoubleSide
     });
-    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.1 + rng() * 1.5, 5.8 + rng() * 1.7), material);
-    shaft.position.set(-5.5 + rng() * 11, 1.65 + rng() * 0.9, -5.8 + rng() * 1.4);
-    shaft.rotation.set(0, -0.15 + rng() * 0.3, -0.42 + rng() * 0.84);
+    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(mode === "shore" ? 1.6 + rng() * 1.8 : 1.1 + rng() * 1.5, mode === "shore" ? 4.6 + rng() * 1.2 : 5.8 + rng() * 1.7), material);
+    if (mode === "shore") {
+      shaft.position.set(0.8 + rng() * 6.8, 1.9 + rng() * 0.72, -6.05 + rng() * 0.9);
+      shaft.rotation.set(0, -0.08 + rng() * 0.18, -0.62 + rng() * 0.24);
+    } else {
+      shaft.position.set(-5.5 + rng() * 11, 1.65 + rng() * 0.9, -5.8 + rng() * 1.4);
+      shaft.rotation.set(0, -0.15 + rng() * 0.3, -0.42 + rng() * 0.84);
+    }
     shaft.renderOrder = -1;
     shaft.userData = {
       kind: "shaft",
@@ -3159,19 +3414,19 @@ function addFireflies(parent, mode, rng) {
 }
 
 function addWaterGlints(parent, rng) {
-  for (let i = 0; i < 24; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     const material = new THREE.MeshBasicMaterial({
       color: state.resolvedTheme === "light" ? 0xfff5cb : 0x8ed8ce,
       transparent: true,
-      opacity: (state.resolvedTheme === "light" ? 0.09 : 0.18) * (0.45 + rng() * 0.65),
+      opacity: (state.resolvedTheme === "light" ? 0.07 : 0.13) * (0.45 + rng() * 0.65),
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
     });
-    const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.42 + rng() * 1.35, 0.012 + rng() * 0.018), material);
+    const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.34 + rng() * 1.1, 0.009 + rng() * 0.014), material);
     glint.rotation.x = -Math.PI / 2;
     glint.rotation.z = -0.2 + rng() * 0.4;
-    glint.position.set(-9.4 + rng() * 18.8, -1.018, -5.55 + rng() * 3.35);
+    glint.position.set(-9.0 + rng() * 18.0, -1.018, -5.85 + rng() * 2.05);
     glint.userData = {
       kind: "glint",
       phase: rng() * Math.PI * 2,
@@ -3227,14 +3482,151 @@ function addShoreFoamBands(parent, rng) {
     band.position.set((i - 1) * 0.45 + (rng() - 0.5) * 0.4, -1.024 + i * 0.002, -4.65 - i * 0.58);
     band.renderOrder = 1;
     band.userData = {
-      kind: "glint",
+      kind: "foamBand",
       phase: rng() * Math.PI * 2,
       baseOpacity: material.opacity,
-      baseScaleX: band.scale.x,
-      baseX: band.position.x
+      baseX: band.position.x,
+      baseZ: band.position.z
     };
     parent.add(band);
     animatedEnvironment.push(band);
+  }
+}
+
+function makeWetSandSheenTexture(rng) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const light = state.resolvedTheme === "light";
+  const wash = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  wash.addColorStop(0, light ? "rgba(255,247,211,0.24)" : "rgba(114,188,181,0.16)");
+  wash.addColorStop(0.42, light ? "rgba(123,174,174,0.09)" : "rgba(74,150,151,0.11)");
+  wash.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 34; i += 1) {
+    const y = 24 + rng() * 154;
+    const alpha = light ? 0.035 + rng() * 0.075 : 0.04 + rng() * 0.06;
+    ctx.strokeStyle = light ? `rgba(255,246,203,${alpha})` : `rgba(150,220,210,${alpha})`;
+    ctx.lineWidth = 0.7 + rng() * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(-20, y);
+    for (let x = -20; x <= canvas.width + 20; x += 34) {
+      ctx.lineTo(x, y + Math.sin(x * 0.024 + i) * (1.2 + rng() * 2.8));
+    }
+    ctx.stroke();
+  }
+
+  const fade = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(0.2, "rgba(0,0,0,0.9)");
+  fade.addColorStop(0.72, "rgba(0,0,0,0.58)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "source-over";
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.repeat.set(1.55, 1);
+  return texture;
+}
+
+function addWetSandSheen(parent, rng) {
+  const texture = makeWetSandSheenTexture(rng);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: state.resolvedTheme === "light" ? 0.4 : 0.32,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide
+  });
+  const sheen = new THREE.Mesh(new THREE.PlaneGeometry(14.2, 1.72), material);
+  sheen.rotation.x = -Math.PI / 2;
+  sheen.position.set(0, -1.021, -3.08);
+  sheen.renderOrder = 1.2;
+  sheen.userData = {
+    kind: "wetSand",
+    phase: rng() * Math.PI * 2,
+    baseOpacity: material.opacity
+  };
+  parent.add(sheen);
+  animatedEnvironment.push(sheen);
+}
+
+function addCoastalGrass(parent, rng) {
+  const light = state.resolvedTheme === "light";
+  const material = new THREE.MeshStandardMaterial({
+    color: light ? 0x536b3f : 0x244634,
+    roughness: 0.88,
+    metalness: 0,
+    side: THREE.DoubleSide
+  });
+  const group = new THREE.Group();
+  for (let i = 0; i < 38; i += 1) {
+    const side = i % 2 ? 1 : -1;
+    const length = 0.34 + rng() * 0.52;
+    const width = 0.012 + rng() * 0.012;
+    const blade = new THREE.Mesh(makeLeafBladeGeometry(length, width, 5, 0.018 + rng() * 0.02), material);
+    blade.position.set(
+      side * (5.15 + rng() * 2.75),
+      -1.02,
+      -2.85 - rng() * 3.15
+    );
+    blade.rotation.order = "YXZ";
+    blade.rotation.set(
+      -0.48 - rng() * 0.55,
+      side * (0.25 + rng() * 0.46),
+      side * (0.36 + rng() * 0.42)
+    );
+    blade.translateY(length * 0.42);
+    blade.castShadow = true;
+    blade.receiveShadow = true;
+    group.add(blade);
+  }
+  group.userData = {
+    kind: "sway",
+    phase: rng() * Math.PI * 2,
+    baseRotation: 0,
+    strength: light ? 0.004 : 0.006
+  };
+  parent.add(group);
+  animatedEnvironment.push(group);
+}
+
+function addSandRippleGeometry(parent, rng) {
+  const light = state.resolvedTheme === "light";
+  const material = new THREE.MeshStandardMaterial({
+    color: light ? 0x9d8353 : 0x9c8552,
+    roughness: 0.96,
+    metalness: 0,
+    transparent: true,
+    opacity: light ? 0.2 : 0.14,
+    depthWrite: false
+  });
+  for (let i = 0; i < 18; i += 1) {
+    const z = -2.25 + rng() * 3.9;
+    const centerX = (rng() - 0.5) * 2.6;
+    const span = 1.2 + rng() * 3.8;
+    const points = [];
+    for (let step = 0; step < 7; step += 1) {
+      const t = step / 6;
+      const x = centerX + (t - 0.5) * span;
+      const wave = Math.sin(t * Math.PI * 2 + rng() * 0.4) * (0.025 + rng() * 0.025);
+      points.push(new THREE.Vector3(x, -1.012, z + wave));
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const ripple = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.0035 + rng() * 0.003, 5), material);
+    ripple.renderOrder = 1.1;
+    parent.add(ripple);
   }
 }
 
@@ -3245,7 +3637,7 @@ function makeShoreDetailTexture(rng) {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const light = state.resolvedTheme === "light";
-  const ink = light ? "rgba(47,79,70,0.38)" : "rgba(4,24,25,0.74)";
+  const ink = light ? "rgba(47,79,70,0.28)" : "rgba(8,42,43,0.36)";
   const soft = light ? "rgba(255,247,217,0.24)" : "rgba(130,199,188,0.12)";
 
   for (let y = 170; y < 420; y += 18 + rng() * 14) {
@@ -3277,9 +3669,6 @@ function makeShoreDetailTexture(rng) {
     ctx.stroke();
   }
 
-  for (let i = 0; i < 3; i += 1) {
-    drawBackdropBoat(ctx, 360 + i * 610 + rng() * 70, 288 + rng() * 36, 0.42 + rng() * 0.12, light, rng);
-  }
   drawBackdropPalm(ctx, 74, 555, 0.54, 1, ink, rng);
   drawBackdropPalm(ctx, 1988, 560, 0.58, -1, ink, rng);
   drawBackdropPalm(ctx, 1858, 610, 0.42, -1, ink, rng);
@@ -3392,6 +3781,12 @@ function addFinishedShoreBoat(parent, rng) {
     rail.position.set(0, -0.68, z);
     group.add(rail);
   }
+  for (const x of [-0.56, 0.06, 0.62]) {
+    const seat = new THREE.Mesh(new RoundedBoxGeometry(0.38, 0.035, 0.34, 3, 0.012), trimMaterial);
+    seat.position.set(x, -0.62, 0);
+    seat.castShadow = true;
+    group.add(seat);
+  }
 
   for (const z of [-0.62, 0.62]) {
     const float = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 2.18, 14), outriggerMaterial);
@@ -3435,9 +3830,9 @@ function addFinishedShoreBoat(parent, rng) {
     group.add(stripe);
   }
 
-  group.position.set(-3.85 + rng() * 0.95, 0, -6.7 - rng() * 0.35);
+  group.position.set(-4.35 + rng() * 0.7, -0.04, -6.95 - rng() * 0.28);
   group.rotation.y = 0.12 + rng() * 0.18;
-  group.scale.setScalar(0.54 + rng() * 0.08);
+  group.scale.setScalar(0.42 + rng() * 0.055);
   group.userData = {
     kind: "floating",
     phase: rng() * Math.PI * 2,
@@ -3488,6 +3883,8 @@ function addShoreArtifacts(parent, rng) {
 function addBroadPalmCrown(group, crown, size, leafColor, rng, lower = false) {
   const light = state.resolvedTheme === "light";
   const material = createFoliageMaterial({ roughness: light ? 0.82 : 0.94 });
+  material.emissive = new THREE.Color(leafColor);
+  material.emissiveIntensity = light ? 0.008 : 0.045;
   material.depthWrite = true;
   const count = lower ? 8 : 12;
   const leafGroup = new THREE.Group();
@@ -3544,6 +3941,36 @@ function addBroadPalmCrown(group, crown, size, leafColor, rng, lower = false) {
   return leafGroup;
 }
 
+function addPalmSkirt(group, crown, size, rng) {
+  const light = state.resolvedTheme === "light";
+  const material = createFoliageMaterial({ roughness: light ? 0.9 : 0.96 });
+  material.emissive = new THREE.Color(light ? 0x2a1e12 : 0x4b3620);
+  material.emissiveIntensity = light ? 0 : 0.018;
+  const color = light ? 0x8b6f42 : 0x5f4b2b;
+  for (let i = 0; i < 5; i += 1) {
+    const frond = new THREE.Mesh(
+      makePalmFrondGeometry({
+        length: size * (0.7 + rng() * 0.24),
+        ribWidth: size * 0.012,
+        leafletPairs: 8 + Math.floor(rng() * 3),
+        leafletLength: 0.2 + rng() * 0.05,
+        leafletWidth: 0.025 + rng() * 0.006,
+        curvature: 0.045 + rng() * 0.025,
+        droop: 0.42 + rng() * 0.12,
+        twist: (rng() - 0.5) * 0.04,
+        color
+      }),
+      material
+    );
+    frond.position.copy(crown).add(new THREE.Vector3((rng() - 0.5) * size * 0.08, -size * 0.08, (rng() - 0.5) * size * 0.08));
+    frond.rotation.order = "YXZ";
+    frond.rotation.set(Math.PI * 0.96 + rng() * 0.18, i * THREE.MathUtils.degToRad(72) + rng() * 0.24, (rng() - 0.5) * 0.18);
+    frond.castShadow = true;
+    frond.receiveShadow = true;
+    group.add(frond);
+  }
+}
+
 function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ringMaterial, rng) {
   const baseY = -1.03;
   const curve = new THREE.CatmullRomCurve3([
@@ -3575,6 +4002,18 @@ function addCurvedPalm(group, x, z, height, lean, leafColor, trunkMaterial, ring
   mainCrown.rotation.y = rng() * Math.PI * 2;
   const lowerCrown = addBroadPalmCrown(group, crown.clone().add(new THREE.Vector3(0, -0.06, 0)), crownSize * 0.54, lowerLeafColor, rng, true);
   lowerCrown.rotation.y = rng() * Math.PI * 2 + 0.32;
+  addPalmSkirt(group, crown.clone(), crownSize * 0.56, rng);
+  for (const crownGroup of [mainCrown, lowerCrown]) {
+    crownGroup.userData = {
+      kind: "palmCrown",
+      phase: rng() * Math.PI * 2,
+      baseRotationX: crownGroup.rotation.x,
+      baseRotationY: crownGroup.rotation.y,
+      baseRotationZ: crownGroup.rotation.z,
+      strength: 0.018 + rng() * 0.014
+    };
+    animatedEnvironment.push(crownGroup);
+  }
   const coconutMaterial = new THREE.MeshStandardMaterial({
     color: state.resolvedTheme === "light" ? 0x5c4526 : 0x20180d,
     roughness: 0.86,
@@ -3811,9 +4250,17 @@ function addNatureGeometry(mode, palette) {
     const water = createShoreWater();
     environmentGroup.add(water);
     animatedEnvironment.push(water);
+    const lagoon = createShallowLagoon();
+    environmentGroup.add(lagoon);
+    animatedEnvironment.push(lagoon);
     addShoreDetailScrim(environmentGroup, rng);
+    addShoreFoamBands(environmentGroup, rng);
+    addWaterGlints(environmentGroup, rng);
+    addWetSandSheen(environmentGroup, rng);
+    addSandRippleGeometry(environmentGroup, rng);
     addFoliageScrims(environmentGroup, mode, palette, rng);
     addShorePalmCluster(environmentGroup, leafColor, rng);
+    addCoastalGrass(environmentGroup, rng);
     addFinishedShoreBoat(environmentGroup, rng);
     addShoreArtifacts(environmentGroup, rng);
     return;
@@ -3870,7 +4317,7 @@ function applyInstrumentTheme() {
   hotBarColor.set(light ? 0xc77b27 : 0xffd278);
   idleBarColor.set(light ? 0xb27a36 : 0xc99b50);
 
-  frameMaterial.color.set(light ? 0x4c351e : 0x2a2015);
+  frameMaterial.color.set(light ? 0x4c351e : 0x342619);
   frameMaterial.roughness = light ? 0.64 : 0.55;
   frameMaterial.metalness = light ? 0.02 : 0.05;
   cordMaterial.color.set(light ? 0x34271b : 0x15110d);
@@ -3881,10 +4328,11 @@ function applyInstrumentTheme() {
   bars.forEach((bar, index) => {
     const hue = light ? 0.086 + (index % 5) * 0.004 : 0.082 + (index % 5) * 0.006;
     const saturation = light ? 0.62 + (index % 3) * 0.035 : 0.66 + (index % 3) * 0.035;
-    const luminance = light ? 0.39 + (index % 4) * 0.014 : 0.32 + (index % 4) * 0.016;
+    const luminance = light ? 0.39 + (index % 4) * 0.014 : 0.38 + (index % 4) * 0.018;
     bar.userData.idleColor.setHSL(hue, saturation, luminance);
     bar.material.color.lerp(bar.userData.idleColor, 0.76);
     bar.material.emissive.set(light ? 0x100701 : 0x1c0c02);
+    bar.material.emissiveIntensity = light ? 0.04 : 0.18;
     bar.material.roughness = light ? 0.82 : 0.76;
     bar.material.metalness = 0;
     bar.material.transparent = false;
@@ -3894,9 +4342,10 @@ function applyInstrumentTheme() {
   });
 
   resonators.forEach((tube, index) => {
-    scratchColor.setHSL(light ? 0.095 : 0.09, light ? 0.32 : 0.45, light ? 0.42 - index * 0.003 : 0.31 - index * 0.002);
+    scratchColor.setHSL(light ? 0.095 : 0.09, light ? 0.32 : 0.45, light ? 0.42 - index * 0.003 : 0.36 - index * 0.0016);
     tube.material.color.copy(scratchColor);
     tube.material.emissive.set(light ? 0x080301 : 0x1b0d03);
+    tube.material.emissiveIntensity = light ? 0.02 : 0.08;
     tube.material.roughness = light ? 0.5 : 0.36;
     tube.material.metalness = light ? 0.08 : 0.16;
     tube.material.clearcoat = light ? 0.2 : 0.36;
@@ -4904,7 +5353,8 @@ function updateResonators(delta, elapsed) {
   const pulse = underLight.userData.pulse || 0;
   if (pulse > 0) underLight.userData.pulse = Math.max(0, pulse - delta * 3.2);
   const base = state.resolvedTheme === "light" ? 0.12 : 1.15;
-  underLight.intensity = base + pulse * (state.resolvedTheme === "light" ? 0.42 : 1.65) + Math.sin(elapsed * 1.8) * 0.025;
+  const sceneBase = underLight.userData.baseIntensity ?? base;
+  underLight.intensity = sceneBase + pulse * (state.resolvedTheme === "light" ? 0.42 : 1.65) + Math.sin(elapsed * 1.8) * 0.025;
 }
 
 function updateSuspension(delta, elapsed) {
@@ -4956,8 +5406,20 @@ function updateEnvironment(delta, elapsed) {
       item.position.x = item.userData.baseX + Math.sin(elapsed * 0.055 + item.userData.phase) * 0.08;
       item.position.y = item.userData.baseY + Math.sin(elapsed * 0.075 + item.userData.phase) * 0.025;
       item.material.opacity = item.userData.baseOpacity * (0.92 + Math.sin(elapsed * 0.12 + item.userData.phase) * 0.06);
+    } else if (kind === "palmCrown") {
+      item.rotation.x = item.userData.baseRotationX + Math.sin(elapsed * 0.54 + item.userData.phase) * item.userData.strength * 0.38;
+      item.rotation.y = item.userData.baseRotationY + Math.sin(elapsed * 0.36 + item.userData.phase) * item.userData.strength;
+      item.rotation.z = item.userData.baseRotationZ + Math.sin(elapsed * 0.74 + item.userData.phase) * item.userData.strength * 0.72;
     } else if (kind === "reed" || kind === "sway") {
       item.rotation.z = item.userData.baseRotation + Math.sin(elapsed * 0.9 + item.userData.phase) * item.userData.strength;
+    } else if (kind === "foamBand") {
+      const pulse = 0.5 + Math.sin(elapsed * 0.42 + item.userData.phase) * 0.5;
+      item.material.opacity = item.userData.baseOpacity * (0.74 + pulse * 0.26 + sceneEnergy * 0.18);
+      item.position.z = item.userData.baseZ + Math.sin(elapsed * 0.16 + item.userData.phase) * 0.035;
+      item.material.map.offset.x = elapsed * (0.011 + sceneEnergy * 0.006);
+    } else if (kind === "wetSand") {
+      item.material.opacity = item.userData.baseOpacity * (0.78 + Math.sin(elapsed * 0.28 + item.userData.phase) * 0.12 + sceneEnergy * 0.16);
+      item.material.map.offset.x = elapsed * 0.007;
     } else if (kind === "glint") {
       const pulse = 0.5 + Math.sin(elapsed * 0.72 + item.userData.phase) * 0.5;
       item.material.opacity = item.userData.baseOpacity * (0.32 + pulse * 0.78 + sceneEnergy * 0.42);
@@ -4992,7 +5454,8 @@ function updateEnvironment(delta, elapsed) {
   if (rimLight) {
     rimLight.position.x = 5.8 + Math.sin(elapsed * 0.24) * 0.38;
     rimLight.position.z = -5.2 + Math.cos(elapsed * 0.18) * 0.26;
-    rimLight.intensity = (state.resolvedTheme === "light" ? 1.7 : 2.5) + sceneEnergy * (state.resolvedTheme === "light" ? 0.22 : 0.42);
+    const baseIntensity = rimLight.userData.baseIntensity ?? (state.resolvedTheme === "light" ? 1.7 : 2.5);
+    rimLight.intensity = baseIntensity + sceneEnergy * (state.resolvedTheme === "light" ? 0.22 : 0.42);
   }
 }
 
