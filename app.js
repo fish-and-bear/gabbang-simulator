@@ -36,13 +36,13 @@ const TUNE_REFERENCES = [
   {
     id: "suwa-suwa",
     title: "Suwa-Suwa",
-    source: "Tausug gabbang. Reference recording, not transcribed.",
+    source: "Reference recording, not transcribed.",
     url: `${ROOT}audio/PIISD02596__gabbang/ILGN_TSG_Gabbang_PIECE1_SuwaSuwa.mp3`
   },
   {
     id: "magellan",
     title: "Magellan",
-    source: "Tausug gabbang. Reference recording, not transcribed.",
+    source: "Reference recording, not transcribed.",
     url: `${ROOT}audio/PIISD02596__gabbang/ILGN_TSG_Gabbang_PIECE2_Magellan%20.mp3`
   }
 ];
