@@ -135,6 +135,7 @@ button.active {
 .inspector,
 .note-readout,
 .score-panel,
+.panel-toggles,
 .about-toggle,
 .about-panel,
 .reference-toggle,
@@ -149,6 +150,7 @@ button.active {
 .sound-toggle,
 .inspector,
 .note-readout,
+.panel-toggles,
 .about-toggle,
 .about-panel,
 .reference-toggle,
@@ -403,9 +405,17 @@ select option:checked {
   overflow: hidden;
 }
 
-.reference-toggle {
+.panel-toggles {
   right: 20px;
   bottom: 136px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reference-toggle {
   min-width: 0;
   min-height: 34px;
   padding: 0 12px;
@@ -424,8 +434,6 @@ select option:checked {
 }
 
 .about-toggle {
-  right: 83px;
-  bottom: 136px;
   min-width: 0;
   min-height: 34px;
   padding: 0 12px;
@@ -436,6 +444,12 @@ select option:checked {
   font-weight: 720;
   letter-spacing: 0;
   backdrop-filter: blur(18px);
+}
+
+.panel-toggles .about-toggle,
+.panel-toggles .reference-toggle {
+  position: static;
+  white-space: nowrap;
 }
 
 .about-toggle[aria-expanded="true"] {
@@ -825,6 +839,7 @@ select option:checked {
 [data-preview="social"] .inspector,
 [data-preview="social"] .note-readout,
 [data-preview="social"] .score-panel,
+[data-preview="social"] .panel-toggles,
 [data-preview="social"] .about-toggle,
 [data-preview="social"] .about-panel,
 [data-preview="social"] .reference-toggle,
@@ -945,14 +960,10 @@ select option:checked {
     gap: 5px;
   }
 
-  .reference-toggle {
+  .panel-toggles {
     right: 14px;
     bottom: calc(220px + var(--safe-bottom));
-  }
-
-  .about-toggle {
-    right: 78px;
-    bottom: calc(220px + var(--safe-bottom));
+    max-width: calc(100vw - 28px);
   }
 
   .note-readout {
@@ -1114,13 +1125,12 @@ select option:checked {
     bottom: calc(264px + var(--safe-bottom));
   }
 
-  .reference-toggle {
+  .panel-toggles {
     bottom: calc(220px + var(--safe-bottom));
   }
 
   .about-toggle {
-    right: 76px;
-    bottom: calc(220px + var(--safe-bottom));
+    right: auto;
   }
 
   .score-body {
@@ -1189,7 +1199,7 @@ select option:checked {
     bottom: calc(264px + var(--safe-bottom));
   }
 
-  .reference-toggle {
+  .panel-toggles {
     bottom: calc(220px + var(--safe-bottom));
   }
 
@@ -1197,7 +1207,4 @@ select option:checked {
     bottom: calc(264px + var(--safe-bottom));
   }
 
-  .about-toggle {
-    bottom: calc(220px + var(--safe-bottom));
-  }
 }
