@@ -63,11 +63,11 @@
       <section class="control-strip" aria-label="Instrument controls">
         <div class="audio-status-chip is-loading" id="audioStatus" role="status" aria-live="polite">
           <span class="mini-spinner" aria-hidden="true"></span>
-          <span id="audioStatusText">Audio loading</span>
+          <span id="audioStatusText">Loading</span>
         </div>
-        <button id="recordToggle" type="button">Record</button>
-        <button id="playLoop" type="button" aria-label="Play loop" disabled><span class="wide-label">Play loop</span><span class="mobile-label">Loop</span></button>
-        <button id="clearLoop" type="button" disabled>Clear</button>
+        <button id="recordToggle" class="record-button" type="button" aria-label="Start recording" aria-pressed="false">Record</button>
+        <button id="playLoop" class="loop-button" type="button" aria-label="Play loop" disabled><span class="wide-label">Play loop</span><span class="mobile-label">Loop</span></button>
+        <button id="clearLoop" class="clear-button" type="button" disabled>Clear</button>
       </section>
 
       <button class="theme-cycle" id="themeCycle" type="button" aria-label="Theme: light">Light</button>

@@ -4677,6 +4677,8 @@ function toggleRecord() {
     state.isRecording = true;
     state.recordStart = performance.now();
     els.recordToggle.textContent = "Stop";
+    els.recordToggle.setAttribute("aria-label", "Stop recording");
+    els.recordToggle.setAttribute("aria-pressed", "true");
     els.recordToggle.classList.add("active");
     els.playLoop.disabled = true;
     els.clearLoop.disabled = true;
@@ -4684,6 +4686,8 @@ function toggleRecord() {
   }
   state.isRecording = false;
   els.recordToggle.textContent = "Record";
+  els.recordToggle.setAttribute("aria-label", "Start recording");
+  els.recordToggle.setAttribute("aria-pressed", "false");
   els.recordToggle.classList.remove("active");
   els.playLoop.disabled = state.loopEvents.length === 0;
   els.clearLoop.disabled = state.loopEvents.length === 0;

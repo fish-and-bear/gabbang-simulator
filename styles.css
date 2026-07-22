@@ -218,12 +218,49 @@ button.active {
   bottom: calc(22px + var(--safe-bottom));
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 7px;
+  padding: 7px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--panel);
+  box-shadow: 0 18px 46px var(--shadow);
   backdrop-filter: blur(18px);
+}
+
+.control-strip button,
+.audio-status-chip {
+  box-shadow: none;
+}
+
+.record-button {
+  min-width: 82px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: rgba(255, 212, 122, 0.46);
+  background: rgba(255, 212, 122, 0.12);
+  font-weight: 760;
+}
+
+.record-button.active {
+  border-color: rgba(204, 89, 75, 0.76);
+  background: rgba(204, 89, 75, 0.22);
+  color: var(--text);
+}
+
+.record-button.active::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(204, 89, 75, 0.16);
+}
+
+.loop-button:not(:disabled) {
+  border-color: rgba(111, 181, 155, 0.58);
+  background: rgba(111, 181, 155, 0.14);
 }
 
 .mobile-label {
@@ -244,7 +281,6 @@ button.active {
   background: rgba(111, 181, 155, 0.15);
   color: var(--text);
   font-weight: 720;
-  box-shadow: 0 10px 28px var(--shadow);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -274,8 +310,9 @@ button.active {
   right: 20px;
   z-index: 5;
   min-width: 66px;
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 10px;
+  border-radius: 17px;
   box-shadow: 0 10px 26px var(--shadow);
   background: var(--panel-strong);
   backdrop-filter: blur(18px);
@@ -407,19 +444,25 @@ select option:checked {
 
 .panel-toggles {
   right: 20px;
-  bottom: 136px;
+  bottom: 142px;
   max-width: calc(100vw - 40px);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 14px 34px var(--shadow);
+  backdrop-filter: blur(18px);
 }
 
 .reference-toggle {
   min-width: 0;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 12px;
-  border-radius: 17px;
+  border-radius: 6px;
   background: var(--panel-strong);
   color: var(--text);
   font-size: 13px;
@@ -435,9 +478,9 @@ select option:checked {
 
 .about-toggle {
   min-width: 0;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 12px;
-  border-radius: 17px;
+  border-radius: 6px;
   background: var(--panel-strong);
   color: var(--text);
   font-size: 13px;
@@ -449,7 +492,19 @@ select option:checked {
 .panel-toggles .about-toggle,
 .panel-toggles .reference-toggle {
   position: static;
+  background: transparent;
+  box-shadow: none;
   white-space: nowrap;
+}
+
+.panel-toggles .reference-toggle[aria-expanded="true"] {
+  border-color: rgba(255, 212, 122, 0.58);
+  background: rgba(255, 212, 122, 0.16);
+}
+
+.panel-toggles .about-toggle[aria-expanded="true"] {
+  border-color: rgba(111, 181, 155, 0.68);
+  background: rgba(111, 181, 155, 0.18);
 }
 
 .about-toggle[aria-expanded="true"] {
@@ -799,38 +854,46 @@ select option:checked {
   bottom: calc(22px + var(--safe-bottom));
   display: grid;
   grid-template-columns: repeat(8, minmax(32px, 42px));
-  gap: 6px;
-  padding: 8px;
+  gap: 7px;
+  padding: 9px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--panel);
+  box-shadow: 0 18px 46px var(--shadow);
   backdrop-filter: blur(18px);
 }
 
 .key-rail button {
   width: 100%;
-  height: 42px;
-  min-height: 42px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   display: grid;
   place-items: center;
   gap: 1px;
+  border-radius: 7px;
+  background: rgba(244, 238, 220, 0.055);
+  box-shadow: none;
   line-height: 1;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
 .key-rail button span:first-child {
-  font-size: 11px;
-  color: var(--muted);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 780;
 }
 
 .key-rail button span:last-child {
-  font-size: 14px;
-  font-weight: 730;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 740;
 }
 
 .key-rail button.hot {
   background: rgba(255, 212, 122, 0.28);
   border-color: rgba(255, 212, 122, 0.75);
+  transform: translateY(-2px);
 }
 
 [data-preview="social"] .control-strip,
@@ -1053,7 +1116,7 @@ select option:checked {
 
   .control-strip {
     display: grid;
-    grid-template-columns: minmax(72px, 0.9fr) repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(86px, 1.05fr) repeat(3, minmax(0, 0.9fr));
     gap: 6px;
     overflow: visible;
   }
@@ -1093,11 +1156,11 @@ select option:checked {
   }
 
   .key-rail button span:first-child {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .key-rail button span:last-child {
-    font-size: 12px;
+    font-size: 10px;
   }
 
   .score-head {
