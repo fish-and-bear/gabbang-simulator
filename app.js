@@ -3602,34 +3602,6 @@ function addCoastalGrass(parent, rng) {
   animatedEnvironment.push(group);
 }
 
-function addSandRippleGeometry(parent, rng) {
-  const light = state.resolvedTheme === "light";
-  const material = new THREE.MeshStandardMaterial({
-    color: light ? 0x9d8353 : 0x9c8552,
-    roughness: 0.96,
-    metalness: 0,
-    transparent: true,
-    opacity: light ? 0.2 : 0.14,
-    depthWrite: false
-  });
-  for (let i = 0; i < 18; i += 1) {
-    const z = -2.25 + rng() * 3.9;
-    const centerX = (rng() - 0.5) * 2.6;
-    const span = 1.2 + rng() * 3.8;
-    const points = [];
-    for (let step = 0; step < 7; step += 1) {
-      const t = step / 6;
-      const x = centerX + (t - 0.5) * span;
-      const wave = Math.sin(t * Math.PI * 2 + rng() * 0.4) * (0.025 + rng() * 0.025);
-      points.push(new THREE.Vector3(x, -1.012, z + wave));
-    }
-    const curve = new THREE.CatmullRomCurve3(points);
-    const ripple = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.0035 + rng() * 0.003, 5), material);
-    ripple.renderOrder = 1.1;
-    parent.add(ripple);
-  }
-}
-
 function makeShoreDetailTexture(rng) {
   const canvas = document.createElement("canvas");
   canvas.width = 2048;
@@ -4257,7 +4229,6 @@ function addNatureGeometry(mode, palette) {
     addShoreFoamBands(environmentGroup, rng);
     addWaterGlints(environmentGroup, rng);
     addWetSandSheen(environmentGroup, rng);
-    addSandRippleGeometry(environmentGroup, rng);
     addFoliageScrims(environmentGroup, mode, palette, rng);
     addShorePalmCluster(environmentGroup, leafColor, rng);
     addCoastalGrass(environmentGroup, rng);
