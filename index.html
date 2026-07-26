@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gabbang | Browser Instrument Simulator</title>
-    <meta name="description" content="Play a 3D gabbang in the browser, using recorded Tausug gabbang samples and keyboard or touch controls.">
-    <meta name="robots" content="index, follow">
+    <title>Gabbang | Play a Philippine Bamboo Xylophone</title>
+    <meta name="description" content="Play a 3D gabbang with touch or keyboard. Hear 16 recorded Tausug bamboo-xylophone notes and follow reference performances from the Katunog archive.">
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
     <meta name="application-name" content="Gabbang">
     <meta name="apple-mobile-web-app-title" content="Gabbang">
     <meta name="theme-color" content="#e8efe8" media="(prefers-color-scheme: light)">
@@ -14,21 +14,22 @@
     <link rel="manifest" href="/site.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg">
     <meta property="og:site_name" content="Gabbang">
-    <meta property="og:locale" content="en_US">
+    <meta property="og:locale" content="en_PH">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://gabbang.hapinas.net/">
-    <meta property="og:title" content="Gabbang">
-    <meta property="og:description" content="A playable 3D gabbang built from recorded Tausug gabbang samples.">
-    <meta property="og:image" content="https://gabbang.hapinas.net/brand/gabbang-social.jpg">
+    <meta property="og:title" content="Gabbang | Play a Philippine Bamboo Xylophone">
+    <meta property="og:description" content="Play 16 recorded Tausug gabbang notes in a 3D instrument built for touch and keyboard.">
+    <meta property="og:image" content="https://gabbang.hapinas.net/brand/gabbang-social-2026-07.jpg">
+    <meta property="og:image:secure_url" content="https://gabbang.hapinas.net/brand/gabbang-social-2026-07.jpg">
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="A 3D gabbang with bamboo keys in a Sulu shore scene.">
+    <meta property="og:image:alt" content="A 3D gabbang with 16 bamboo keys standing on the sand beside a tropical shore.">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Gabbang">
-    <meta name="twitter:description" content="Play a 3D gabbang in the browser with recorded Tausug gabbang samples.">
-    <meta name="twitter:image" content="https://gabbang.hapinas.net/brand/gabbang-social.jpg">
-    <meta name="twitter:image:alt" content="A 3D gabbang with bamboo keys in a Sulu shore scene.">
+    <meta name="twitter:title" content="Gabbang | Play a Philippine Bamboo Xylophone">
+    <meta name="twitter:description" content="Play 16 recorded Tausug gabbang notes in a 3D instrument built for touch and keyboard.">
+    <meta name="twitter:image" content="https://gabbang.hapinas.net/brand/gabbang-social-2026-07.jpg">
+    <meta name="twitter:image:alt" content="A 3D gabbang with 16 bamboo keys standing on the sand beside a tropical shore.">
     <script>
       if (new URLSearchParams(window.location.search).get("preview") === "social") {
         document.documentElement.dataset.preview = "social";
@@ -38,14 +39,35 @@
       {
         "@context": "https://schema.org",
         "@type": "WebApplication",
+        "@id": "https://gabbang.hapinas.net/#app",
         "name": "Gabbang",
+        "alternateName": "Gabbang Browser Instrument",
         "url": "https://gabbang.hapinas.net/",
         "applicationCategory": "MusicApplication",
-        "operatingSystem": "Any modern browser",
-        "description": "A playable 3D gabbang built from recorded Tausug gabbang samples.",
-        "image": "https://gabbang.hapinas.net/brand/gabbang-social.jpg",
-        "inLanguage": "en",
-        "isAccessibleForFree": true
+        "applicationSubCategory": "Virtual musical instrument",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript, WebGL, and Web Audio",
+        "description": "Play 16 recorded Tausug gabbang notes in a 3D instrument built for touch and keyboard.",
+        "image": "https://gabbang.hapinas.net/brand/gabbang-social-2026-07.jpg",
+        "screenshot": "https://gabbang.hapinas.net/brand/gabbang-social-2026-07.jpg",
+        "inLanguage": "en-PH",
+        "isAccessibleForFree": true,
+        "featureList": [
+          "16 playable sampled notes",
+          "Touch and keyboard controls",
+          "Interactive 3D instrument",
+          "Reference recordings"
+        ],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "PHP"
+        },
+        "about": {
+          "@type": "Thing",
+          "name": "Gabbang",
+          "description": "A bamboo xylophone from the southern Philippines."
+        }
       }
     </script>
     <link rel="stylesheet" href="./styles.css">
@@ -61,6 +83,16 @@
           </span>
           <h1>Gabbang</h1>
         </div>
+      </section>
+
+      <section class="social-preview-lockup" aria-hidden="true">
+        <div class="social-preview-wordmark">
+          <span class="brand-glyph">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </span>
+          <span>Gabbang</span>
+        </div>
+        <p>16 sampled Tausug notes. Play with touch or keyboard.</p>
       </section>
 
       <section class="control-strip" aria-label="Instrument controls">

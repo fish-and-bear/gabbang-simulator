@@ -1,7 +1,9 @@
 {
   "name": "Gabbang",
   "short_name": "Gabbang",
-  "description": "Play a 3D gabbang in the browser with recorded Tausug gabbang samples.",
+  "description": "Play 16 recorded Tausug gabbang notes in a 3D instrument built for touch and keyboard.",
+  "lang": "en-PH",
+  "categories": ["music", "education", "entertainment"],
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
