@@ -1061,6 +1061,20 @@ select option:checked {
   font-weight: 740;
 }
 
+[data-input-mode="touch"] .key-rail button {
+  gap: 0;
+}
+
+[data-input-mode="touch"] .key-rail button .keyboard-hint {
+  display: none;
+}
+
+[data-input-mode="touch"] .key-rail button .note-label {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 780;
+}
+
 .key-rail button.hot {
   background: rgba(255, 212, 122, 0.28);
   border-color: rgba(255, 212, 122, 0.75);

@@ -29,6 +29,7 @@ const LONG_PIECE_PATTERN = /PIECE|SAMPLE|ENSEMBLE/i;
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 const MOBILE_CONTROLS_MEDIA = window.matchMedia("(max-width: 880px)");
+const PRIMARY_TOUCH_MEDIA = window.matchMedia("(hover: none) and (pointer: coarse)");
 const COMPACT_LANDSCAPE_MEDIA = window.matchMedia(
   "(orientation: landscape) and (max-width: 880px) and (max-height: 520px)"
 );
@@ -138,6 +139,7 @@ const state = {
   samples: new Map(),
   notes: [],
   activeNote: 1,
+  noteTriggered: false,
   ready: false,
   audioUnlocked: false,
   loading: false,
@@ -768,6 +770,7 @@ animate();
 
 async function init() {
   createKeyRail();
+  syncInputMode();
   createScore();
   setupReferenceTune();
   setReferencePanelOpen(state.referenceOpen);
@@ -5427,13 +5430,50 @@ function createKeyRail() {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.note = String(i + 1);
-    button.innerHTML = `<span>${NOTE_KEYS[i]}</span><span>N${i + 1}</span>`;
+    button.dataset.keyboardKey = NOTE_KEYS[i];
+    button.innerHTML = `<span class="keyboard-hint" aria-hidden="true">${NOTE_KEYS[i]}</span><span class="note-label">N${i + 1}</span>`;
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       triggerNote(i + 1, 0.86);
     });
     els.keyRail.appendChild(button);
   }
+}
+
+function usesTouchControls() {
+  return MOBILE_CONTROLS_MEDIA.matches || PRIMARY_TOUCH_MEDIA.matches;
+}
+
+function updateNoteInputHint(note = state.activeNote) {
+  if (usesTouchControls()) {
+    els.noteMeta.textContent = state.noteTriggered ? "tap another note" : "tap a bamboo key or note button";
+    return;
+  }
+
+  const key = NOTE_KEYS[note - 1];
+  els.noteMeta.textContent = state.noteTriggered && key
+    ? `key ${key}`
+    : `press ${NOTE_KEYS.join(" ")}`;
+}
+
+function syncInputMode() {
+  const touch = usesTouchControls();
+  document.documentElement.dataset.inputMode = touch ? "touch" : "keyboard";
+  els.keyRail.setAttribute(
+    "aria-label",
+    touch ? "Tap note buttons" : "Playable notes and keyboard shortcuts"
+  );
+  els.keyRail.querySelectorAll("button").forEach((button) => {
+    const note = button.dataset.note;
+    const key = button.dataset.keyboardKey;
+    button.setAttribute(
+      "aria-label",
+      touch ? `Play note N${note}` : `Play note N${note} with key ${key}`
+    );
+    if (touch) button.removeAttribute("aria-keyshortcuts");
+    else button.setAttribute("aria-keyshortcuts", key);
+  });
+  updateNoteInputHint();
 }
 
 function wireUi() {
@@ -5455,10 +5495,12 @@ function wireUi() {
     if (state.themeChoice === "auto") applyThemeChoice("auto");
   });
   MOBILE_CONTROLS_MEDIA.addEventListener("change", () => {
+    syncInputMode();
     syncSoundPanelState();
     updateAudioStatusLabel();
     setBackdrop(state.backdrop);
   });
+  PRIMARY_TOUCH_MEDIA.addEventListener("change", syncInputMode);
 
   els.backdropSelect.addEventListener("change", () => setBackdrop(els.backdropSelect.value));
 
@@ -5854,9 +5896,9 @@ function queuePlayAfterLoad(note, velocity) {
 function triggerNote(note, velocity = 0.9, scheduledAt = 0, visualDelay = 0, scoreIndex = -1) {
   if (!scheduledAt) audio.primeFromGesture(note);
   state.activeNote = note;
-  const key = NOTE_KEYS[note - 1];
+  state.noteTriggered = true;
   els.noteName.textContent = `N${note}`;
-  els.noteMeta.textContent = key ? `key ${key}` : "touch bar";
+  updateNoteInputHint(note);
   if (scoreIndex >= 0) {
     window.setTimeout(() => setScoreCursor(scoreIndex), visualDelay || 0);
   }
