@@ -312,6 +312,16 @@ button.active {
   font-weight: 760;
 }
 
+.record-button::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(204, 89, 75, 0.12);
+}
+
 .record-button.active {
   border-color: rgba(204, 89, 75, 0.76);
   background: rgba(204, 89, 75, 0.22);
@@ -319,12 +329,41 @@ button.active {
 }
 
 .record-button.active::before {
+  border-radius: 2px;
+  box-shadow: 0 0 0 3px rgba(204, 89, 75, 0.2);
+}
+
+.loop-button,
+.clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.loop-button {
+  min-width: 94px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.loop-button::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 0 3px rgba(204, 89, 75, 0.16);
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
+  opacity: 0.78;
+}
+
+.loop-button > span {
+  position: relative;
+  z-index: 1;
 }
 
 .loop-button:not(:disabled) {
@@ -332,8 +371,71 @@ button.active {
   background: rgba(111, 181, 155, 0.14);
 }
 
-.mobile-label {
-  display: none;
+.loop-button.playing {
+  --loop-progress: 0%;
+  border-color: rgba(89, 176, 143, 0.84);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(111, 181, 155, 0.34) 0 var(--loop-progress),
+      rgba(111, 181, 155, 0.12) var(--loop-progress) 100%
+    );
+}
+
+.loop-button.playing::before {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.loop-button.starting::before {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.72s linear infinite;
+}
+
+.clear-button {
+  min-width: 72px;
+}
+
+.clear-button::before {
+  content: "\00d7";
+  flex: 0 0 auto;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 0.8;
+  opacity: 0.72;
+}
+
+.transport-time {
+  color: var(--muted);
+  font-size: 0.84em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+}
+
+.record-button.active .transport-time,
+.loop-button.playing .transport-time {
+  color: currentColor;
+  opacity: 0.74;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .audio-status-chip {
@@ -1226,6 +1328,10 @@ select option:checked {
     overflow: visible;
   }
 
+  .control-strip.audio-ready {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .control-strip button,
   .audio-status-chip {
     min-width: 0;
@@ -1245,14 +1351,6 @@ select option:checked {
   .audio-status-chip .mini-spinner {
     width: 13px;
     height: 13px;
-  }
-
-  .wide-label {
-    display: none;
-  }
-
-  .mobile-label {
-    display: inline;
   }
 
   .key-rail button {
@@ -1311,6 +1409,16 @@ select option:checked {
 
   .score-note .degree {
     font-size: 22px;
+  }
+}
+
+@media (min-width: 521px) and (max-width: 880px) and (min-height: 521px) {
+  .control-strip {
+    left: 50%;
+    right: auto;
+    width: max-content;
+    max-width: calc(100vw - 28px);
+    transform: translateX(-50%);
   }
 }
 
@@ -1441,6 +1549,10 @@ select option:checked {
     min-height: 40px;
     padding: 0 4px;
     font-size: 12px;
+  }
+
+  .control-strip .transport-time {
+    display: none;
   }
 
   .control-strip .audio-status-chip {

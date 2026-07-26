@@ -100,9 +100,18 @@
           <span class="mini-spinner" aria-hidden="true"></span>
           <span id="audioStatusText">Loading</span>
         </div>
-        <button id="recordToggle" class="record-button" type="button" aria-label="Start recording" aria-pressed="false">Record</button>
-        <button id="playLoop" class="loop-button" type="button" aria-label="Play loop" disabled><span class="wide-label">Play loop</span><span class="mobile-label">Loop</span></button>
-        <button id="clearLoop" class="clear-button" type="button" disabled>Clear</button>
+        <button id="recordToggle" class="record-button" type="button" aria-label="Start recording" aria-pressed="false">
+          <span id="recordLabel" class="transport-label">Record</span>
+          <span id="recordTime" class="transport-time" aria-hidden="true"></span>
+        </button>
+        <button id="playLoop" class="loop-button" type="button" aria-label="Play loop" aria-pressed="false" disabled>
+          <span id="playLoopLabel" class="transport-label">Play</span>
+          <span id="playLoopTime" class="transport-time" aria-hidden="true"></span>
+        </button>
+        <button id="clearLoop" class="clear-button" type="button" aria-label="Clear loop" disabled>
+          <span class="transport-label">Clear</span>
+        </button>
+        <span id="loopStatus" class="sr-only" role="status" aria-live="polite"></span>
       </section>
 
       <button class="theme-cycle" id="themeCycle" type="button" aria-label="Theme: light">Light</button>

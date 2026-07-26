@@ -144,7 +144,13 @@ const state = {
   recordStart: 0,
   isRecording: false,
   loopEvents: [],
-  loopTimers: [],
+  loopDuration: 0,
+  loopTimers: new Set(),
+  isLoopPlaying: false,
+  loopStarting: false,
+  loopPlaybackStart: 0,
+  transportFrame: 0,
+  lastRecordSecond: -1,
   strikeScale: 0.86,
   cameraMode: "performer",
   cameraYaw: 0,
@@ -183,9 +189,15 @@ const els = {
   canvas: document.getElementById("stage"),
   audioStatus: document.getElementById("audioStatus"),
   audioStatusText: document.getElementById("audioStatusText"),
+  controlStrip: document.querySelector(".control-strip"),
   recordToggle: document.getElementById("recordToggle"),
+  recordLabel: document.getElementById("recordLabel"),
+  recordTime: document.getElementById("recordTime"),
   playLoop: document.getElementById("playLoop"),
+  playLoopLabel: document.getElementById("playLoopLabel"),
+  playLoopTime: document.getElementById("playLoopTime"),
   clearLoop: document.getElementById("clearLoop"),
+  loopStatus: document.getElementById("loopStatus"),
   themeCycle: document.getElementById("themeCycle"),
   soundToggle: document.getElementById("soundToggle"),
   soundPanel: document.getElementById("soundPanel"),
@@ -762,6 +774,7 @@ async function init() {
   setAboutPanelOpen(state.aboutOpen);
   setSoundPanelOpen(state.soundOpen);
   wireUi();
+  syncTransportUi();
   applyThemeChoice(state.themeChoice);
   setAudioStatus("Loading", true);
   updateLoad(0, 1, "Reading Katunog manifest");
@@ -5492,6 +5505,10 @@ function wireUi() {
   window.addEventListener("pointercancel", pointerUp);
   window.addEventListener("mouseup", endCameraDrag);
   window.addEventListener("blur", endCameraDrag);
+  window.addEventListener("pagehide", interruptTransport);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) interruptTransport();
+  });
   els.canvas.addEventListener("pointermove", pointerMove);
   els.canvas.addEventListener("pointerdown", pointerDown);
   els.canvas.addEventListener("pointerup", pointerUp);
@@ -5524,6 +5541,7 @@ function setAudioStatus(text, loading, failed = false) {
   els.audioStatus.classList.toggle("is-loading", loading);
   els.audioStatus.classList.toggle("ready", !loading && !failed && state.ready);
   els.audioStatus.classList.toggle("failed", failed);
+  els.controlStrip.classList.toggle("audio-ready", !loading && !failed && state.ready);
   if (els.loadState) els.loadState.classList.toggle("is-loading", loading);
 }
 
@@ -5867,8 +5885,7 @@ function triggerNote(note, velocity = 0.9, scheduledAt = 0, visualDelay = 0, sco
       velocity,
       at: performance.now() - state.recordStart
     });
-    els.playLoop.disabled = true;
-    els.clearLoop.disabled = false;
+    syncTransportUi();
   }
 
   const delay = visualDelay || 0;
@@ -5895,53 +5912,228 @@ function triggerVisual(note, velocity) {
 }
 
 function toggleRecord() {
-  if (!state.isRecording) {
-    clearLoop();
-    state.isRecording = true;
-    state.recordStart = performance.now();
-    els.recordToggle.textContent = "Stop";
-    els.recordToggle.setAttribute("aria-label", "Stop recording");
-    els.recordToggle.setAttribute("aria-pressed", "true");
-    els.recordToggle.classList.add("active");
-    els.playLoop.disabled = true;
-    els.clearLoop.disabled = true;
+  if (state.isRecording) {
+    finishRecording();
     return;
   }
+  startRecording();
+}
+
+function startRecording() {
+  stopLoopPlayback({ announce: false, sync: false });
+  state.loopEvents = [];
+  state.loopDuration = 0;
+  state.isRecording = true;
+  state.recordStart = performance.now();
+  state.lastRecordSecond = -1;
+  syncTransportUi();
+  announceTransport("Recording started.");
+  startTransportFrame();
+}
+
+function finishRecording({ announcement = "" } = {}) {
+  if (!state.isRecording) return;
+  const elapsed = Math.max(0, performance.now() - state.recordStart);
   state.isRecording = false;
-  els.recordToggle.textContent = "Record";
-  els.recordToggle.setAttribute("aria-label", "Start recording");
-  els.recordToggle.setAttribute("aria-pressed", "false");
-  els.recordToggle.classList.remove("active");
-  els.playLoop.disabled = state.loopEvents.length === 0;
-  els.clearLoop.disabled = state.loopEvents.length === 0;
+  state.lastRecordSecond = -1;
+  if (state.loopEvents.length) {
+    const lastEventAt = state.loopEvents[state.loopEvents.length - 1].at;
+    state.loopDuration = Math.max(600, elapsed, lastEventAt + 280);
+  } else {
+    state.loopDuration = 0;
+  }
+  syncTransportUi();
+  stopTransportFrameIfIdle();
+
+  if (announcement) {
+    announceTransport(announcement);
+  } else if (state.loopEvents.length) {
+    announceTransport(
+      `Loop ready. ${formatNoteCount(state.loopEvents.length)}, ${formatTransportTime(state.loopDuration, true)}.`
+    );
+  } else {
+    announceTransport("Recording stopped. No notes captured.");
+  }
 }
 
 async function playLoop() {
   if (state.isRecording || !state.loopEvents.length) return;
-  await ensurePlayable();
+  if (state.isLoopPlaying) {
+    stopLoopPlayback();
+    return;
+  }
+
   clearLoopTimers();
-  const duration = Math.max(...state.loopEvents.map((event) => event.at)) + 420;
-  const playOnce = () => {
-    state.loopEvents.forEach((event) => {
-      const timer = window.setTimeout(() => triggerNote(event.note, event.velocity), event.at);
-      state.loopTimers.push(timer);
-    });
-  };
-  playOnce();
-  state.loopTimers.push(window.setInterval(playOnce, duration));
+  state.isLoopPlaying = true;
+  state.loopStarting = true;
+  syncTransportUi();
+  announceTransport("Preparing loop.");
+
+  try {
+    await ensurePlayable();
+  } catch (error) {
+    console.warn("Loop playback could not start", error);
+    stopLoopPlayback({ announce: false });
+    announceTransport("Loop playback could not start. Try again.");
+    return;
+  }
+
+  if (!state.isLoopPlaying) return;
+  state.loopStarting = false;
+  state.loopPlaybackStart = performance.now();
+  syncTransportUi();
+  scheduleLoopCycle(state.loopPlaybackStart);
+  startTransportFrame();
+  announceTransport(
+    `Loop playing. ${formatNoteCount(state.loopEvents.length)}, ${formatTransportTime(state.loopDuration, true)}.`
+  );
 }
 
-function clearLoop() {
-  state.loopEvents = [];
+function scheduleLoopCycle(targetStart) {
+  if (!state.isLoopPlaying || state.loopStarting || !state.loopEvents.length) return;
+  const cycleDelay = Math.max(0, targetStart - performance.now());
+  state.loopEvents.forEach((event) => {
+    addLoopTimer(() => {
+      if (state.isLoopPlaying) triggerNote(event.note, event.velocity);
+    }, cycleDelay + event.at);
+  });
+  addLoopTimer(() => {
+    scheduleLoopCycle(targetStart + state.loopDuration);
+  }, cycleDelay + state.loopDuration);
+}
+
+function addLoopTimer(callback, delay) {
+  const timer = window.setTimeout(() => {
+    state.loopTimers.delete(timer);
+    callback();
+  }, Math.max(0, delay));
+  state.loopTimers.add(timer);
+}
+
+function stopLoopPlayback({ announce = true, sync = true } = {}) {
+  const wasPlaying = state.isLoopPlaying;
+  state.isLoopPlaying = false;
+  state.loopStarting = false;
+  state.loopPlaybackStart = 0;
   clearLoopTimers();
-  els.playLoop.disabled = true;
-  els.clearLoop.disabled = true;
+  els.playLoop.style.removeProperty("--loop-progress");
+  if (sync) syncTransportUi();
+  stopTransportFrameIfIdle();
+  if (wasPlaying && announce) announceTransport("Loop stopped.");
+}
+
+function clearLoop({ announce = true } = {}) {
+  stopLoopPlayback({ announce: false, sync: false });
+  state.loopEvents = [];
+  state.loopDuration = 0;
+  syncTransportUi();
+  stopTransportFrameIfIdle();
+  if (announce) announceTransport("Loop cleared.");
 }
 
 function clearLoopTimers() {
   state.loopTimers.forEach((timer) => window.clearTimeout(timer));
-  state.loopTimers.forEach((timer) => window.clearInterval(timer));
-  state.loopTimers = [];
+  state.loopTimers.clear();
+}
+
+function formatNoteCount(count) {
+  return `${count} ${count === 1 ? "note" : "notes"}`;
+}
+
+function formatTransportTime(milliseconds, roundUp = false) {
+  const seconds = Math.max(0, roundUp ? Math.ceil(milliseconds / 1000) : Math.floor(milliseconds / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function syncTransportUi() {
+  const hasLoop = state.loopEvents.length > 0;
+  const loopTime = hasLoop ? formatTransportTime(state.loopDuration, true) : "";
+
+  els.recordLabel.textContent = state.isRecording ? "Stop" : "Record";
+  if (!state.isRecording) els.recordTime.textContent = "";
+  else if (!els.recordTime.textContent) els.recordTime.textContent = "0:00";
+  els.recordToggle.classList.toggle("active", state.isRecording);
+  els.recordToggle.setAttribute("aria-pressed", String(state.isRecording));
+  els.recordToggle.setAttribute("aria-label", state.isRecording ? "Stop recording" : "Start a new recording");
+  els.recordToggle.title = state.isRecording ? "Stop recording" : "Start a new recording";
+
+  els.playLoopLabel.textContent = state.loopStarting ? "Loading" : state.isLoopPlaying ? "Stop" : "Play";
+  els.playLoopTime.textContent = loopTime;
+  els.playLoop.classList.toggle("playing", state.isLoopPlaying && !state.loopStarting);
+  els.playLoop.classList.toggle("starting", state.loopStarting);
+  els.playLoop.disabled = state.isRecording || !hasLoop;
+  els.playLoop.setAttribute("aria-pressed", String(state.isLoopPlaying));
+  const loopSummary = hasLoop
+    ? `${formatNoteCount(state.loopEvents.length)}, ${loopTime}`
+    : "no loop recorded";
+  const playLabel = state.loopStarting
+    ? "Cancel loop start"
+    : state.isLoopPlaying
+      ? "Stop loop"
+      : `Play loop, ${loopSummary}`;
+  els.playLoop.setAttribute("aria-label", playLabel);
+  els.playLoop.title = playLabel;
+  els.playLoop.dataset.notes = String(state.loopEvents.length);
+  els.playLoop.dataset.duration = String(Math.round(state.loopDuration));
+
+  els.clearLoop.disabled = state.isRecording || !hasLoop;
+  els.clearLoop.title = hasLoop ? `Clear loop, ${loopSummary}` : "Clear loop";
+  els.controlStrip.dataset.transport = state.isRecording
+    ? "recording"
+    : state.loopStarting
+      ? "starting"
+      : state.isLoopPlaying
+        ? "playing"
+        : hasLoop
+          ? "ready"
+          : "idle";
+}
+
+function announceTransport(message) {
+  els.loopStatus.textContent = message;
+}
+
+function startTransportFrame() {
+  if (state.transportFrame) return;
+  state.transportFrame = window.requestAnimationFrame(updateTransportFrame);
+}
+
+function updateTransportFrame() {
+  state.transportFrame = 0;
+  if (state.isRecording) {
+    const elapsed = performance.now() - state.recordStart;
+    const second = Math.floor(elapsed / 1000);
+    if (second !== state.lastRecordSecond) {
+      state.lastRecordSecond = second;
+      els.recordTime.textContent = formatTransportTime(elapsed);
+    }
+  }
+
+  if (state.isLoopPlaying && !state.loopStarting && state.loopDuration > 0) {
+    const elapsed = performance.now() - state.loopPlaybackStart;
+    const progress = ((elapsed % state.loopDuration) / state.loopDuration) * 100;
+    els.playLoop.style.setProperty("--loop-progress", `${progress.toFixed(2)}%`);
+  }
+
+  if (state.isRecording || state.isLoopPlaying) {
+    state.transportFrame = window.requestAnimationFrame(updateTransportFrame);
+  }
+}
+
+function stopTransportFrameIfIdle() {
+  if (state.isRecording || state.isLoopPlaying || !state.transportFrame) return;
+  window.cancelAnimationFrame(state.transportFrame);
+  state.transportFrame = 0;
+}
+
+function interruptTransport() {
+  if (state.isRecording) {
+    finishRecording({ announcement: "Recording stopped when the app left the foreground." });
+  }
+  if (state.isLoopPlaying) {
+    stopLoopPlayback({ announce: false });
+    announceTransport("Loop paused when the app left the foreground.");
+  }
 }
 
 function moveMallet(note) {
