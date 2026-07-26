@@ -41,6 +41,12 @@ CC BY 3.0:
 
 https://poly.pizza/m/auVD_m-ugF0
 
+The 360 environment photographs are resized versions of Secluded Beach,
+River Walk 1, Monbachtal Riverbank, and Park Music Stage from Poly Haven. They are
+released under CC0 1.0:
+
+https://polyhaven.com/license
+
 The Katunog audio and metadata are not MIT licensed. See `NOTICE.md`.
 
 ## Controls
