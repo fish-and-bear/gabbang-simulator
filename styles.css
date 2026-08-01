@@ -1612,6 +1612,185 @@ select option:checked {
   }
 }
 
+/* Instrument notes use the same modal reading surface as the kulintang player. */
+.about-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(680px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(760px, calc(100dvh - 32px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--control-solid);
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.about-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.about-dialog::backdrop {
+  background: rgba(8, 7, 5, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.dialog-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--control-solid);
+}
+
+.dialog-head .eyebrow {
+  display: block;
+  margin: 0;
+  color: var(--bamboo-hot);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dialog-head h2 {
+  margin: 6px 0 0;
+  font-family: "Iowan Old Style", "Baskerville", Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.dialog-head .icon-button {
+  flex: 0 0 auto;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.about-dialog .about-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 24px 26px;
+  color: var(--muted);
+  font-family: "Iowan Old Style", "Baskerville", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.58;
+}
+
+.about-dialog .about-body p {
+  max-width: 60ch;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.about-dialog .facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 26px 0;
+  border-top: 1px solid var(--line);
+}
+
+.about-dialog .facts div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.about-dialog .facts div:nth-child(odd) {
+  padding-right: 18px;
+}
+
+.about-dialog .facts div:nth-child(even) {
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.about-dialog .facts dt {
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.about-dialog .facts dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.about-dialog .sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+}
+
+.about-dialog .sources span {
+  color: var(--muted);
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.about-dialog .sources a {
+  color: var(--bamboo-hot);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.about-dialog .sources small {
+  flex-basis: 100%;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 520px) {
+  .about-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .dialog-head {
+    padding: 20px 18px 16px;
+  }
+
+  .dialog-head h2 {
+    font-size: 25px;
+  }
+
+  .about-dialog .about-body {
+    padding: 18px;
+    font-size: 16px;
+  }
+
+  .about-dialog .facts {
+    grid-template-columns: 1fr;
+  }
+
+  .about-dialog .facts div,
+  .about-dialog .facts div:nth-child(odd),
+  .about-dialog .facts div:nth-child(even) {
+    padding: 11px 0;
+    border-left: 0;
+  }
+}
+
 /* Compact instrument controls shared with the kulintang player. */
 :root {
   --control-surface: rgba(18, 20, 16, 0.9);
@@ -1754,9 +1933,11 @@ select option:checked {
   top: calc(72px + var(--safe-top));
   right: 20px;
   display: flex;
+  gap: 6px;
 }
 
-.scene-tools .reference-toggle {
+.scene-tools .reference-toggle,
+.scene-tools .camera-reset {
   position: relative;
   inset: auto;
   width: 38px;

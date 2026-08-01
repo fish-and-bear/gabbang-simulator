@@ -103,9 +103,12 @@
         <p>16 sampled Tausug notes. Play with touch or keyboard.</p>
       </section>
 
-      <section class="scene-tools" aria-label="Reference controls">
+      <section class="scene-tools" aria-label="View controls">
         <button class="icon-button reference-toggle" id="referenceToggle" type="button" aria-controls="referencePanel" aria-expanded="false" aria-label="Reference tunes" data-tooltip="Reference tunes">
           <i data-lucide="music-2"></i>
+        </button>
+        <button class="icon-button camera-reset" id="cameraReset" type="button" aria-label="Reset camera" data-tooltip="Reset view">
+          <i data-lucide="focus"></i>
         </button>
       </section>
 
@@ -207,48 +210,38 @@
         <audio id="referenceAudio" preload="metadata"></audio>
       </section>
 
-      <section class="about-panel" id="aboutPanel" aria-label="About the gabbang" hidden>
-        <div class="about-head">
+      <dialog class="about-dialog" id="aboutPanel" aria-label="About the gabbang">
+        <div class="dialog-head">
           <div>
-            <p class="eyebrow">About</p>
-            <h2>Gabbang</h2>
+            <span class="eyebrow">About the instrument</span>
+            <h2>A Tausug gabbang from Jolo</h2>
           </div>
           <button class="icon-button" id="aboutClose" type="button" aria-label="Close about panel" data-tooltip="Close">
             <i data-lucide="x"></i>
           </button>
         </div>
         <div class="about-body">
-          <p class="about-lede">
-            A gabbang is a bamboo xylophone from the southern Philippines. It sounds bright and woody because the keys are split bamboo, not metal.
-          </p>
-          <dl class="about-facts">
-            <div>
-              <dt>Keys</dt>
-              <dd>Loose bamboo keys sit over a box frame. Longer keys make lower notes.</dd>
-            </div>
-            <div>
-              <dt>Players</dt>
-              <dd>Tausug, Sama Bajau, Yakan, and Palawan communities have their own versions, with different key counts and tunings.</dd>
-            </div>
-            <div>
-              <dt>Use</dt>
-              <dd>In Sulu, it accompanies singing and solo playing. One Sulu source calls it the most popular musical instrument there.</dd>
-            </div>
-            <div>
-              <dt>Transmission</dt>
-              <dd>Yakan master Uwang Ahadas taught gabbang and other Yakan instruments to younger players.</dd>
-            </div>
+          <p>This simulator models one 16-key Tausug gabbang recorded by Katunog in Jolo, Sulu. A gabbang is a xylophone whose split-bamboo keys rest loosely above a wooden box frame and are struck with two beaters.</p>
+          <p>Key length shapes pitch: longer keys produce lower notes and shorter keys produce higher ones. Gabbang made by Tausug, Sama Bajau, Yakan, and Palawan communities can differ in size, tuning, and number of keys.</p>
+          <p>In Sulu, the instrument is played on its own and with singing. A National Library survey of Sulu musical life describes it as the area&rsquo;s most popular musical instrument.</p>
+          <p>The gabbang also belongs to living teaching traditions. Yakan master Uwang Ahadas, recognized as a Manlilikha ng Bayan, taught gabbang and other instruments to younger musicians.</p>
+          <p>This player uses 68 individual strikes from Katunog record PIISD02596 and two reference recordings from the same archive. Its note numbers describe this sampled set; they are not a universal tuning chart.</p>
+          <dl class="facts">
+            <div><dt>Tradition</dt><dd>Tausug</dd></div>
+            <div><dt>Keys</dt><dd>16 split-bamboo keys</dd></div>
+            <div><dt>Recorded</dt><dd>Jolo, Sulu</dd></div>
+            <div><dt>Collection</dt><dd>Katunog PIISD02596</dd></div>
           </dl>
-          <p class="about-note">
-            This app follows recorded Tausug gabbang samples, so it represents one sampled instrument, not a universal tuning chart.
-          </p>
-          <div class="about-sources" aria-label="About sources">
-            <a href="https://nlpdl.nlp.gov.ph/CC01/monographs/1994/NLP00VM052mcd/v1/v46.pdf" target="_blank" rel="noreferrer">National Library</a>
-            <a href="https://www.nationalmuseum.gov.ph/2022/02/15/birth-anniversary-of-manlilikha-ng-bayan-uwang-ahadas/" target="_blank" rel="noreferrer">National Museum</a>
-            <a href="https://sil-philippines-languages.org/online/yka/dict/lexicon/lx01233.html" target="_blank" rel="noreferrer">Yakan dictionary</a>
+          <div class="sources" aria-label="About sources">
+            <span>Sources</span>
+            <a href="https://katunog.asti.dost.gov.ph/" target="_blank" rel="noreferrer">Katunog, DOST-ASTI &middot; PIISD02596</a>
+            <a href="https://nlpdl.nlp.gov.ph/CC01/monographs/1994/NLP00VM052mcd/v1/v46.pdf" target="_blank" rel="noreferrer">National Library &middot; Sulu musical instruments</a>
+            <a href="https://www.nationalmuseum.gov.ph/2022/02/15/birth-anniversary-of-manlilikha-ng-bayan-uwang-ahadas/" target="_blank" rel="noreferrer">National Museum &middot; Uwang Ahadas</a>
+            <a href="https://sil-philippines-languages.org/online/yka/dict/lexicon/lx01233.html" target="_blank" rel="noreferrer">Yakan dictionary &middot; gabbang</a>
+            <small>Katunog audio &copy; DOST-ASTI and the University of the Philippines.</small>
           </div>
         </div>
-      </section>
+      </dialog>
 
       <div id="keyRail" class="key-rail" aria-label="Playable note buttons"></div>
 

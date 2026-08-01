@@ -11,6 +11,7 @@ import { GroundedSkybox } from "three/addons/objects/GroundedSkybox.js";
 import { Water } from "three/addons/objects/Water.js";
 import {
   Circle,
+  Focus,
   Info,
   LoaderCircle,
   Music2,
@@ -33,6 +34,7 @@ import {
 createIcons({
   icons: {
     Circle,
+    Focus,
     Info,
     LoaderCircle,
     Music2,
@@ -248,6 +250,7 @@ const els = {
   staffScore: document.getElementById("staffScore"),
   referencePanel: document.getElementById("referencePanel"),
   referenceToggle: document.getElementById("referenceToggle"),
+  cameraReset: document.getElementById("cameraReset"),
   aboutPanel: document.getElementById("aboutPanel"),
   aboutToggle: document.getElementById("aboutToggle"),
   aboutClose: document.getElementById("aboutClose"),
@@ -5364,7 +5367,8 @@ function toggleReferencePanel() {
 
 function setAboutPanelOpen(open) {
   state.aboutOpen = open;
-  els.aboutPanel.hidden = !open;
+  if (open && !els.aboutPanel.open) els.aboutPanel.showModal();
+  if (!open && els.aboutPanel.open) els.aboutPanel.close();
   const label = open ? "Close about panel" : "About the gabbang";
   els.aboutToggle.setAttribute("aria-label", label);
   els.aboutToggle.dataset.tooltip = open ? "Close about" : "About";
@@ -5565,8 +5569,15 @@ function wireUi() {
   els.clearLoop.addEventListener("click", () => clearLoop());
   els.soundToggle.addEventListener("click", () => toggleSoundPanel());
   els.referenceToggle.addEventListener("click", () => toggleReferencePanel());
+  els.cameraReset.addEventListener("click", () => applyCameraPreset("performer"));
   els.aboutToggle.addEventListener("click", () => toggleAboutPanel());
   els.aboutClose.addEventListener("click", () => setAboutPanelOpen(false));
+  els.aboutPanel.addEventListener("close", () => setAboutPanelOpen(false));
+  els.aboutPanel.addEventListener("click", (event) => {
+    const rect = els.aboutPanel.getBoundingClientRect();
+    const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+    if (outside) setAboutPanelOpen(false);
+  });
   els.referencePlay.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     toggleReferencePlayback();
