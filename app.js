@@ -122,8 +122,8 @@ const BACKDROP_ENVIRONMENTS = {
     groundHeight: { desktop: 6.7, mobile: 9.6 },
     groundRadius: 76,
     cameraTargetY: { desktop: 0.76, mobile: 2.62 },
-    backgroundIntensity: { light: 0.9, dark: 0.52 },
-    environmentIntensity: { light: 0.78, dark: 0.5 }
+    backgroundIntensity: { light: 0.9, dark: 0.17 },
+    environmentIntensity: { light: 0.78, dark: 0.44 }
   },
   grove: {
     url: `${ENVIRONMENT_ROOT}river-walk-6k.webp`,
@@ -135,8 +135,8 @@ const BACKDROP_ENVIRONMENTS = {
     groundHeight: { desktop: 6.8, mobile: 9.8 },
     groundRadius: 76,
     cameraTargetY: { desktop: 0.9, mobile: 3.02 },
-    backgroundIntensity: { light: 0.76, dark: 0.5 },
-    environmentIntensity: { light: 0.68, dark: 0.46 }
+    backgroundIntensity: { light: 0.76, dark: 0.17 },
+    environmentIntensity: { light: 0.68, dark: 0.42 }
   },
   rainforest: {
     url: `${ENVIRONMENT_ROOT}riverbank-6k.webp`,
@@ -148,8 +148,8 @@ const BACKDROP_ENVIRONMENTS = {
     groundHeight: { desktop: 7.1, mobile: 10.1 },
     groundRadius: 76,
     cameraTargetY: { desktop: 1.2, mobile: 3.28 },
-    backgroundIntensity: { light: 0.86, dark: 0.54 },
-    environmentIntensity: { light: 0.74, dark: 0.5 }
+    backgroundIntensity: { light: 0.86, dark: 0.18 },
+    environmentIntensity: { light: 0.74, dark: 0.44 }
   },
   studio: {
     url: `${ENVIRONMENT_ROOT}park-stage-6k.webp`,
@@ -161,8 +161,8 @@ const BACKDROP_ENVIRONMENTS = {
     groundHeight: { desktop: 8.5, mobile: 11.5 },
     groundRadius: 78,
     cameraTargetY: { desktop: 1.05, mobile: 3.18 },
-    backgroundIntensity: { light: 0.86, dark: 0.54 },
-    environmentIntensity: { light: 0.74, dark: 0.5 }
+    backgroundIntensity: { light: 0.86, dark: 0.16 },
+    environmentIntensity: { light: 0.74, dark: 0.42 }
   }
 };
 const REQUESTED_BACKDROP = new URLSearchParams(window.location.search).get("scene");
@@ -691,6 +691,8 @@ let keyLight;
 let fillLight;
 let rimLight;
 let underLight;
+let playerLight;
+let instrumentFill;
 let backdropTexture;
 let groundedBackdrop;
 let backdropLoadToken = 0;
@@ -858,6 +860,14 @@ function setupScene() {
   underLight = new THREE.PointLight(0xffc471, 0.16, 7.5, 2.1);
   underLight.position.set(0, -0.78, 0.35);
   scene.add(underLight);
+
+  playerLight = new THREE.SpotLight(0xffd4a0, 0, 28, Math.PI * 0.24, 0.72, 1.25);
+  playerLight.position.set(0, 7.4, 7.8);
+  playerLight.target.position.set(0, -0.15, 0);
+  scene.add(playerLight, playerLight.target);
+
+  instrumentFill = new THREE.AmbientLight(0xffd7ad, 0);
+  scene.add(instrumentFill);
   scene.add(environmentGroup);
 
   floorMesh = new THREE.Mesh(new THREE.CircleGeometry(90, 192), floorMaterial);
@@ -2385,20 +2395,22 @@ function setBackdrop(mode) {
   configureCaustics(mode);
   applyBackdropLighting(mode);
   if (state.resolvedTheme === "dark") {
-    hemiLight.intensity *= 1.28;
+    hemiLight.intensity *= 1.24;
     keyLight.intensity *= 1.48;
     fillLight.intensity *= 1.34;
     rimLight.intensity *= 1.22;
-    underLight.intensity *= 1.16;
+    underLight.intensity *= 0.52;
     rimLight.userData.baseIntensity = rimLight.intensity;
     underLight.userData.baseIntensity = underLight.intensity;
   }
+  playerLight.intensity = state.resolvedTheme === "light" ? 0 : 8;
+  instrumentFill.intensity = state.resolvedTheme === "light" ? 0 : 0.82;
   renderer.toneMappingExposure = mode === "studio"
-    ? (state.resolvedTheme === "light" ? 0.94 : 1.02)
-    : (state.resolvedTheme === "light" ? 0.96 : 1.06);
+    ? (state.resolvedTheme === "light" ? 0.94 : 0.76)
+    : (state.resolvedTheme === "light" ? 0.96 : 0.78);
   bloom.strength = mode === "studio"
-    ? (state.resolvedTheme === "light" ? 0.025 : 0.1)
-    : (state.resolvedTheme === "light" ? 0.035 : 0.12);
+    ? (state.resolvedTheme === "light" ? 0.025 : 0.045)
+    : (state.resolvedTheme === "light" ? 0.035 : 0.055);
   sceneBloomStrength = bloom.strength;
   ssao.kernelRadius = state.resolvedTheme === "light" ? 9 : 12;
 
@@ -5134,12 +5146,12 @@ function applyInstrumentTheme() {
 
   frameMaterial.color.set(light ? 0xb38257 : 0xb48758);
   frameMaterial.emissive.set(light ? 0x0b0502 : 0x2d1b0d);
-  frameMaterial.emissiveIntensity = light ? 0.02 : 0.34;
+  frameMaterial.emissiveIntensity = light ? 0.02 : 0.42;
   frameMaterial.roughness = light ? 0.68 : 0.58;
   frameMaterial.metalness = light ? 0.02 : 0.05;
   standMaterial.color.set(light ? 0x8f6036 : 0x9b6b3d);
   standMaterial.emissive.set(light ? 0x090402 : 0x241409);
-  standMaterial.emissiveIntensity = light ? 0.015 : 0.22;
+  standMaterial.emissiveIntensity = light ? 0.015 : 0.3;
   standMaterial.roughness = light ? 0.76 : 0.68;
   cordMaterial.color.set(light ? 0x34271b : 0x44311f);
   bandMaterial.color.set(light ? 0x72421f : 0x81502b);
@@ -5153,7 +5165,7 @@ function applyInstrumentTheme() {
     bar.userData.idleColor.setHSL(hue, saturation, luminance);
     bar.material.color.lerp(bar.userData.idleColor, 0.76);
     bar.material.emissive.set(light ? 0x100701 : 0x4a2106);
-    bar.material.emissiveIntensity = light ? 0.04 : 0.3;
+    bar.material.emissiveIntensity = light ? 0.04 : 0.44;
     bar.material.roughness = light ? 0.82 : 0.76;
     bar.material.metalness = 0;
     bar.material.transparent = false;
@@ -5166,7 +5178,7 @@ function applyInstrumentTheme() {
     scratchColor.setHSL(light ? 0.095 : 0.09, light ? 0.32 : 0.45, light ? 0.42 - index * 0.003 : 0.44 - index * 0.0016);
     tube.material.color.copy(scratchColor);
     tube.material.emissive.set(light ? 0x080301 : 0x1b0d03);
-    tube.material.emissiveIntensity = light ? 0.02 : 0.16;
+    tube.material.emissiveIntensity = light ? 0.02 : 0.22;
     tube.material.roughness = light ? 0.5 : 0.36;
     tube.material.metalness = light ? 0.08 : 0.16;
     tube.material.clearcoat = light ? 0.2 : 0.36;
