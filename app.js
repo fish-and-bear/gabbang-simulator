@@ -10,11 +10,41 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GroundedSkybox } from "three/addons/objects/GroundedSkybox.js";
 import { Water } from "three/addons/objects/Water.js";
 import {
+  Circle,
+  Info,
+  LoaderCircle,
+  Music2,
+  Pause,
+  Play,
+  Settings2,
+  Square,
+  SunMoon,
+  Trash2,
+  X,
+  createIcons
+} from "lucide";
+import {
   addBambooSpray,
   createFoliageMaterial,
   makePalmFrondGeometry,
   makeBroadLeafGeometry
 } from "./proceduralFoliage.js";
+
+createIcons({
+  icons: {
+    Circle,
+    Info,
+    LoaderCircle,
+    Music2,
+    Pause,
+    Play,
+    Settings2,
+    Square,
+    SunMoon,
+    Trash2,
+    X
+  }
+});
 
 const ROOT = new URL(window.GABBANG_AUDIO_ROOT || "./data/katunog-public-audio/", window.location.href)
   .toString()
@@ -198,6 +228,7 @@ const els = {
   playLoop: document.getElementById("playLoop"),
   playLoopLabel: document.getElementById("playLoopLabel"),
   playLoopTime: document.getElementById("playLoopTime"),
+  transportReadout: document.getElementById("transportReadout"),
   clearLoop: document.getElementById("clearLoop"),
   loopStatus: document.getElementById("loopStatus"),
   themeCycle: document.getElementById("themeCycle"),
@@ -5081,8 +5112,9 @@ function applyThemeChoice(choice) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
-  els.themeCycle.textContent = choice === "auto" ? "Auto" : choice === "dark" ? "Dark" : "Light";
-  els.themeCycle.setAttribute("aria-label", `Theme: ${choice}`);
+  const themeLabel = `Theme: ${choice}`;
+  els.themeCycle.setAttribute("aria-label", themeLabel);
+  els.themeCycle.dataset.tooltip = themeLabel;
   hemiLight.intensity = state.resolvedTheme === "light" ? 1.55 : 1.2;
   keyLight.intensity = state.resolvedTheme === "light" ? 3.15 : 4.8;
   fillLight.intensity = state.resolvedTheme === "light" ? 1.1 : 1.8;
@@ -5318,7 +5350,9 @@ function setScoreCursor(index) {
 function setReferencePanelOpen(open) {
   state.referenceOpen = open;
   els.referencePanel.hidden = !open;
-  els.referenceToggle.textContent = open ? "Hide tune" : "Tune";
+  const label = open ? "Hide reference tunes" : "Reference tunes";
+  els.referenceToggle.setAttribute("aria-label", label);
+  els.referenceToggle.dataset.tooltip = label;
   els.referenceToggle.setAttribute("aria-expanded", String(open));
   document.documentElement.dataset.referenceOpen = open ? "true" : "false";
   if (open && state.aboutOpen) setAboutPanelOpen(false);
@@ -5331,7 +5365,9 @@ function toggleReferencePanel() {
 function setAboutPanelOpen(open) {
   state.aboutOpen = open;
   els.aboutPanel.hidden = !open;
-  els.aboutToggle.textContent = open ? "Hide" : "About";
+  const label = open ? "Close about panel" : "About the gabbang";
+  els.aboutToggle.setAttribute("aria-label", label);
+  els.aboutToggle.dataset.tooltip = open ? "Close about" : "About";
   els.aboutToggle.setAttribute("aria-expanded", String(open));
   document.documentElement.dataset.aboutOpen = open ? "true" : "false";
   if (open && state.referenceOpen) setReferencePanelOpen(false);
@@ -5342,16 +5378,16 @@ function toggleAboutPanel() {
 }
 
 function syncSoundPanelState() {
-  const mobile = MOBILE_CONTROLS_MEDIA.matches;
   els.soundPanel.classList.toggle("is-open", state.soundOpen);
-  els.soundPanel.setAttribute("aria-hidden", String(mobile && !state.soundOpen));
+  els.soundPanel.setAttribute("aria-hidden", String(!state.soundOpen));
   document.documentElement.dataset.soundOpen = state.soundOpen ? "true" : "false";
 }
 
 function setSoundPanelOpen(open) {
   state.soundOpen = open;
-  els.soundToggle.setAttribute("aria-label", open ? "Hide sound settings" : "Sound settings");
-  els.soundToggle.title = open ? "Hide sound settings" : "Sound settings";
+  const label = open ? "Hide sound and scene settings" : "Sound and scene settings";
+  els.soundToggle.setAttribute("aria-label", label);
+  els.soundToggle.dataset.tooltip = open ? "Close settings" : "Settings";
   els.soundToggle.setAttribute("aria-expanded", String(open));
   syncSoundPanelState();
 }
@@ -5365,7 +5401,7 @@ function closeSoundPanelIfOutside(event) {
   if (state.aboutOpen && !els.aboutPanel.contains(target) && !els.aboutToggle.contains(target)) {
     setAboutPanelOpen(false);
   }
-  if (!MOBILE_CONTROLS_MEDIA.matches || !state.soundOpen) return;
+  if (!state.soundOpen) return;
   if (els.soundPanel.contains(target) || els.soundToggle.contains(target)) return;
   setSoundPanelOpen(false);
 }
@@ -5390,24 +5426,32 @@ function selectReferenceTune(id) {
   els.referenceAudio.pause();
   els.referenceAudio.src = tune.url;
   els.referenceAudio.load();
-  els.referencePlay.textContent = "Play";
   els.referenceSeek.value = "0";
+  syncReferencePlaybackUi();
   updateReferenceTime();
+}
+
+function syncReferencePlaybackUi() {
+  const playing = !els.referenceAudio.paused && !els.referenceAudio.ended;
+  els.referencePlay.classList.toggle("is-playing", playing);
+  const label = playing ? "Pause reference tune" : "Play reference tune";
+  els.referencePlay.setAttribute("aria-label", label);
+  els.referencePlay.dataset.tooltip = playing ? "Pause" : "Play";
 }
 
 async function toggleReferencePlayback() {
   if (els.referenceAudio.paused) {
     try {
       await els.referenceAudio.play();
-      els.referencePlay.textContent = "Pause";
+      syncReferencePlaybackUi();
     } catch (error) {
       console.warn("Reference playback deferred", error);
-      els.referencePlay.textContent = "Play";
+      syncReferencePlaybackUi();
     }
     return;
   }
   els.referenceAudio.pause();
-  els.referencePlay.textContent = "Play";
+  syncReferencePlaybackUi();
 }
 
 function updateReferenceTime() {
@@ -5530,8 +5574,10 @@ function wireUi() {
   els.referenceSelect.addEventListener("change", () => selectReferenceTune(els.referenceSelect.value));
   els.referenceAudio.addEventListener("loadedmetadata", updateReferenceTime);
   els.referenceAudio.addEventListener("timeupdate", updateReferenceTime);
+  els.referenceAudio.addEventListener("play", syncReferencePlaybackUi);
+  els.referenceAudio.addEventListener("pause", syncReferencePlaybackUi);
   els.referenceAudio.addEventListener("ended", () => {
-    els.referencePlay.textContent = "Play";
+    syncReferencePlaybackUi();
     updateReferenceTime();
   });
   els.referenceSeek.addEventListener("input", () => {
@@ -6091,13 +6137,17 @@ function syncTransportUi() {
   const hasLoop = state.loopEvents.length > 0;
   const loopTime = hasLoop ? formatTransportTime(state.loopDuration, true) : "";
 
+  if (!state.isRecording && !state.isLoopPlaying) {
+    els.transportReadout.textContent = hasLoop ? loopTime : "0:00";
+  }
+
   els.recordLabel.textContent = state.isRecording ? "Stop" : "Record";
   if (!state.isRecording) els.recordTime.textContent = "";
   else if (!els.recordTime.textContent) els.recordTime.textContent = "0:00";
   els.recordToggle.classList.toggle("active", state.isRecording);
   els.recordToggle.setAttribute("aria-pressed", String(state.isRecording));
   els.recordToggle.setAttribute("aria-label", state.isRecording ? "Stop recording" : "Start a new recording");
-  els.recordToggle.title = state.isRecording ? "Stop recording" : "Start a new recording";
+  els.recordToggle.dataset.tooltip = state.isRecording ? "Stop recording" : "Record";
 
   els.playLoopLabel.textContent = state.loopStarting ? "Loading" : state.isLoopPlaying ? "Stop" : "Play";
   els.playLoopTime.textContent = loopTime;
@@ -6114,12 +6164,14 @@ function syncTransportUi() {
       ? "Stop loop"
       : `Play loop, ${loopSummary}`;
   els.playLoop.setAttribute("aria-label", playLabel);
-  els.playLoop.title = playLabel;
+  els.playLoop.dataset.tooltip = state.loopStarting ? "Cancel" : state.isLoopPlaying ? "Stop" : "Play";
   els.playLoop.dataset.notes = String(state.loopEvents.length);
   els.playLoop.dataset.duration = String(Math.round(state.loopDuration));
 
   els.clearLoop.disabled = state.isRecording || !hasLoop;
-  els.clearLoop.title = hasLoop ? `Clear loop, ${loopSummary}` : "Clear loop";
+  const clearLabel = hasLoop ? `Clear loop, ${loopSummary}` : "Clear loop";
+  els.clearLoop.setAttribute("aria-label", clearLabel);
+  els.clearLoop.dataset.tooltip = "Clear";
   els.controlStrip.dataset.transport = state.isRecording
     ? "recording"
     : state.loopStarting
@@ -6148,6 +6200,7 @@ function updateTransportFrame() {
     if (second !== state.lastRecordSecond) {
       state.lastRecordSecond = second;
       els.recordTime.textContent = formatTransportTime(elapsed);
+      els.transportReadout.textContent = els.recordTime.textContent;
     }
   }
 
@@ -6155,6 +6208,7 @@ function updateTransportFrame() {
     const elapsed = performance.now() - state.loopPlaybackStart;
     const progress = ((elapsed % state.loopDuration) / state.loopDuration) * 100;
     els.playLoop.style.setProperty("--loop-progress", `${progress.toFixed(2)}%`);
+    els.transportReadout.textContent = formatTransportTime(elapsed % state.loopDuration);
   }
 
   if (state.isRecording || state.isLoopPlaying) {

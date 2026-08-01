@@ -83,6 +83,14 @@
           </span>
           <h1>Gabbang</h1>
         </div>
+        <div class="top-actions">
+          <button class="icon-button about-toggle" id="aboutToggle" type="button" aria-controls="aboutPanel" aria-expanded="false" aria-label="About the gabbang" data-tooltip="About">
+            <i data-lucide="info"></i>
+          </button>
+          <button class="icon-button theme-cycle" id="themeCycle" type="button" aria-label="Theme: light" data-tooltip="Theme: light">
+            <i data-lucide="sun-moon"></i>
+          </button>
+        </div>
       </section>
 
       <section class="social-preview-lockup" aria-hidden="true">
@@ -95,32 +103,42 @@
         <p>16 sampled Tausug notes. Play with touch or keyboard.</p>
       </section>
 
-      <section class="control-strip" aria-label="Instrument controls">
-        <div class="audio-status-chip is-loading" id="audioStatus" role="status" aria-live="polite">
-          <span class="mini-spinner" aria-hidden="true"></span>
-          <span id="audioStatusText">Loading</span>
-        </div>
-        <button id="recordToggle" class="record-button" type="button" aria-label="Start recording" aria-pressed="false">
-          <span id="recordLabel" class="transport-label">Record</span>
-          <span id="recordTime" class="transport-time" aria-hidden="true"></span>
+      <section class="scene-tools" aria-label="Reference controls">
+        <button class="icon-button reference-toggle" id="referenceToggle" type="button" aria-controls="referencePanel" aria-expanded="false" aria-label="Reference tunes" data-tooltip="Reference tunes">
+          <i data-lucide="music-2"></i>
         </button>
-        <button id="playLoop" class="loop-button" type="button" aria-label="Play loop" aria-pressed="false" disabled>
-          <span id="playLoopLabel" class="transport-label">Play</span>
-          <span id="playLoopTime" class="transport-time" aria-hidden="true"></span>
-        </button>
-        <button id="clearLoop" class="clear-button" type="button" aria-label="Clear loop" disabled>
-          <span class="transport-label">Clear</span>
-        </button>
-        <span id="loopStatus" class="sr-only" role="status" aria-live="polite"></span>
       </section>
 
-      <button class="theme-cycle" id="themeCycle" type="button" aria-label="Theme: light">Light</button>
-      <button class="sound-toggle" id="soundToggle" type="button" aria-controls="soundPanel" aria-expanded="false" aria-label="Sound settings" title="Sound settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path>
-          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51.6Z"></path>
-        </svg>
-      </button>
+      <div class="audio-status-chip is-loading" id="audioStatus" role="status" aria-live="polite">
+        <span class="mini-spinner" aria-hidden="true"></span>
+        <span id="audioStatusText">Loading</span>
+      </div>
+
+      <nav class="control-strip" aria-label="Recording controls">
+        <button id="recordToggle" class="transport-button record-button" type="button" aria-label="Start recording" aria-pressed="false" data-tooltip="Record">
+          <i class="record-idle" data-lucide="circle"></i>
+          <i class="record-active" data-lucide="square"></i>
+          <span id="recordLabel" class="transport-label sr-only">Record</span>
+          <span id="recordTime" class="transport-time sr-only" aria-hidden="true"></span>
+        </button>
+        <button id="playLoop" class="transport-button loop-button" type="button" aria-label="Play loop" aria-pressed="false" data-tooltip="Play" disabled>
+          <i class="play-idle" data-lucide="play"></i>
+          <i class="play-active" data-lucide="square"></i>
+          <i class="play-loading" data-lucide="loader-circle"></i>
+          <span id="playLoopLabel" class="transport-label sr-only">Play</span>
+          <span id="playLoopTime" class="transport-time sr-only" aria-hidden="true"></span>
+        </button>
+        <span class="transport-readout" id="transportReadout" aria-live="polite">0:00</span>
+        <button id="clearLoop" class="transport-button clear-button" type="button" aria-label="Clear loop" data-tooltip="Clear" disabled>
+          <i data-lucide="trash-2"></i>
+          <span class="transport-label sr-only">Clear</span>
+        </button>
+        <span class="transport-divider" aria-hidden="true"></span>
+        <button class="transport-button sound-toggle" id="soundToggle" type="button" aria-controls="soundPanel" aria-expanded="false" aria-label="Sound and scene settings" data-tooltip="Settings">
+          <i data-lucide="settings-2"></i>
+        </button>
+        <span id="loopStatus" class="sr-only" role="status" aria-live="polite"></span>
+      </nav>
 
       <aside class="inspector" id="soundPanel" aria-label="Sound controls">
         <label>
@@ -169,15 +187,6 @@
         </div>
       </section>
 
-      <div class="panel-toggles" aria-label="Information panels">
-        <button class="about-toggle" id="aboutToggle" type="button" aria-controls="aboutPanel" aria-expanded="false">
-          About
-        </button>
-        <button class="reference-toggle" id="referenceToggle" type="button" aria-controls="referencePanel" aria-expanded="false">
-          Tune
-        </button>
-      </div>
-
       <section class="reference-panel" id="referencePanel" aria-label="Reference tune" hidden>
         <div class="reference-head">
           <div>
@@ -188,7 +197,10 @@
           <select id="referenceSelect" aria-label="Choose reference tune"></select>
         </div>
         <div class="reference-controls">
-          <button id="referencePlay" type="button">Play</button>
+          <button class="reference-play" id="referencePlay" type="button" aria-label="Play reference tune" data-tooltip="Play">
+            <i class="reference-play-icon" data-lucide="play"></i>
+            <i class="reference-pause-icon" data-lucide="pause"></i>
+          </button>
           <input id="referenceSeek" type="range" min="0" max="1000" value="0" aria-label="Reference tune position">
           <span id="referenceTime">0:00 / 0:00</span>
         </div>
@@ -201,7 +213,9 @@
             <p class="eyebrow">About</p>
             <h2>Gabbang</h2>
           </div>
-          <button id="aboutClose" type="button" aria-label="Close about panel">Close</button>
+          <button class="icon-button" id="aboutClose" type="button" aria-label="Close about panel" data-tooltip="Close">
+            <i data-lucide="x"></i>
+          </button>
         </div>
         <div class="about-body">
           <p class="about-lede">
