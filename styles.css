@@ -1882,16 +1882,22 @@ select option:checked {
 
 .top-actions [data-tooltip]::after,
 .scene-tools [data-tooltip]::after {
-  right: 0;
+  top: 50%;
+  right: calc(100% + 8px);
   left: auto;
-  transform: translateY(-3px);
+  transform: translate(3px, -50%);
+}
+
+.top-actions [data-tooltip]:nth-child(2)::after,
+.scene-tools [data-tooltip]:nth-child(2)::after {
+  right: calc(200% + 14px);
 }
 
 .top-actions [data-tooltip]:hover::after,
 .top-actions [data-tooltip]:focus-visible::after,
 .scene-tools [data-tooltip]:hover::after,
 .scene-tools [data-tooltip]:focus-visible::after {
-  transform: none;
+  transform: translate(0, -50%);
 }
 
 .control-strip [data-tooltip]::after,
@@ -1930,7 +1936,7 @@ select option:checked {
 .scene-tools {
   position: fixed;
   z-index: 5;
-  top: calc(72px + var(--safe-top));
+  top: 66px;
   right: 20px;
   display: flex;
   gap: 6px;
@@ -1940,10 +1946,10 @@ select option:checked {
 .scene-tools .camera-reset {
   position: relative;
   inset: auto;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
-  min-height: 38px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
   padding: 0;
   border-radius: 50%;
   color: var(--text);
@@ -2232,8 +2238,16 @@ select option:checked {
   }
 
   .scene-tools {
-    top: calc(66px + var(--safe-top));
-    right: 12px;
+    top: calc(58px + var(--safe-top));
+    right: 14px;
+  }
+
+  .scene-tools .reference-toggle,
+  .scene-tools .camera-reset {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
   }
 
   .audio-status-chip {
