@@ -32,6 +32,10 @@ cover art was removed so the simulator can load quickly in the browser.
 Audio and metadata are from Katunog, the Philippine Indigenous Instrument Sounds
 Database Project by DOST-ASTI and the University of the Philippines.
 
+The original MP3 credits identify Rano S. Anjah for the 68 individual key
+samples, and Suraida A. Iri with Rano S. Anjah for the two reference
+performances.
+
 Source: https://katunog.asti.dost.gov.ph
 
 Terms: https://katunog.asti.dost.gov.ph/client/terms

@@ -29,6 +29,9 @@ The MP3 files and `public/data/katunog-public-audio/audio_manifest.csv` rows are
 from Katunog, the Philippine Indigenous Instrument Sounds Database Project by
 DOST-ASTI and the University of the Philippines.
 
+The original MP3 metadata credits Rano S. Anjah for the individual key samples,
+and Suraida A. Iri with Rano S. Anjah for the two reference performances.
+
 Source: https://katunog.asti.dost.gov.ph
 
 Terms: https://katunog.asti.dost.gov.ph/client/terms
